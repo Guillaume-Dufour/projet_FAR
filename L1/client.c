@@ -28,7 +28,7 @@ int sendTCP(int sock, char *msg, int sizeOctet, int option){
 
 int main(int argc, char *argv[]) {
 
-	if (argc != 4) {
+	if (argc != 3) {
 		printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");
 		exit(0);
 	}
@@ -69,27 +69,16 @@ int main(int argc, char *argv[]) {
 	char message[100];
 
 	printf("Message : ");
-	gets(message);
-
-
-	int i;
-	int nbMessages = atoi(argv[3]);
-
-	for (i=0; i < nbMessages; i++) {
-		if (i == nbMessages-1) {
-			res = sendTCP(dS, message, strlen(message)+1, 0);
-		}
-		else {
-			res = sendTCP(dS, message, strlen(message), 0); // on envoie pas le '\0' pour que le serveur puisse lire les deux messages en même temps
-		}
-
-		if (res == -1) {
-			perror("Erreur lors de l'envoi");
-		}
-		else {
-			printf("%d caractères ont été envoyés\n", res);
-		}		
+	scanf("%s",message);
+	res = sendTCP(dS, message, strlen(message)+1, 0);
+		
+	if (res == -1) {
+		perror("Erreur lors de l'envoi");
 	}
+	else {
+		printf("%d caractères ont été envoyés\n", res);
+	}		
+	
 
 	return 0;
 }

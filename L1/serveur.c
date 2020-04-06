@@ -48,24 +48,27 @@ int main(int argc, char *argv[]){
                 }
                 printf("après le bind, serveur en écoute\n");
                 int nb_u=0; //nb utilisateurs connectés
+                int users[2];
                 while(nb_u<2){
                         listen(dS,7);
                         struct sockaddr_in aC;
                         socklen_t lg=sizeof(struct sockaddr_in);
-                        
+
                         int dSC = accept(dS, (struct sockaddr*) &aC,&lg);
+                        
                         if(dSC == -1){
                                 perror("l'utilisateur n'a pas été accepté\n");
                         }else{
                                 printf("l'utilisateur à été accepté\n");
+                                users[nb_u]=dSC;
+                                nb_u=nb_u+1;
                         }
-                        nb_u=nb_u+1;
                 }
                 
 
                 char msg[2000];
                 
-                printf("attente de l'envoi d'un message\n");
+                printf("attente de la réception d'un message\n");
                 
                 //On reçoit donc le bon nombre d'octets et les bons messages envoyés
                 int *cpt = 0;
@@ -74,7 +77,7 @@ int main(int argc, char *argv[]){
                 int cpt2=0;
                 while(cpt2<100){
 
-                        rc = recvTCP(dSC,msg,124,0,&cpt);
+                        rc = recvTCP(users[0],msg,124,0,&cpt);
                         if(rc==-1){
                                 perror("erreur de reception");
                         }else if(rc!=0){
@@ -89,7 +92,7 @@ int main(int argc, char *argv[]){
                 }
                 printf("vous avez reçu %d octets en %d paquets\n",total,cpt2);
         
-                close(dSC);
+                /*close(dSC);*/
                 close(dS);
         }else{
                 printf("le nombre de paramètres doit être de 1 (PORT)\n");
