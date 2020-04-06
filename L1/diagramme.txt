@@ -1,0 +1,50 @@
+@startuml
+actor Client1
+actor Client2
+
+
+alt Tous les clients sont connectés
+autonumber "<b>[000]"
+
+activate Serveur
+Serveur --> Serveur :  Attente clients
+activate Client1
+activate Client2
+Client1 --> Serveur :  Connecté
+Client2 --> Serveur :  Connecté
+Serveur --> Serveur :  Prêt
+
+    loop Tous les clients sont connectés, TANT QUE MESSAGE =! FIN
+    Serveur --> Serveur : Attente message
+    alt Tous les messages sont bien transmis
+    Client1 --> Serveur : Envoi d un message
+    Serveur --> Client2 : Transmission message
+    Client2 --> Serveur : Envoi d un message
+    Serveur --> Client1 : Transmission message
+    
+    else Message = Fin
+    Client1 --> Serveur : Envoi d un message de FIN
+    destroy Client1
+    Serveur --> Client2 : Transmission message
+    destroy Client2
+    
+end
+    else Erreur envoi
+    
+    Client1 --> Serveur : Erreur envoi message
+    activate Client1
+    destroy Client1
+
+    end
+    
+
+else Erreur connexion
+    
+Serveur --> Serveur : Attente des clients
+activate Client1
+activate Client2
+Client1 --> Serveur : Erreur connexion client
+destroy Serveur
+end
+
+@enduml
