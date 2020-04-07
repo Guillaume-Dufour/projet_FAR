@@ -76,7 +76,7 @@ void connexionClients() {
 
 void recevoirMessage(int expediteur, char message[100]) {
 
-	int res = recv(expediteur, message, sizeof(message), 0);
+	int res = recv(expediteur, message, 100*sizeof(char), 0);
 
 	if (res == -1) {
 		perror("Erreur lors de la réception du message");
@@ -88,15 +88,20 @@ void recevoirMessage(int expediteur, char message[100]) {
 }
 
 void envoyerMessage(int destinaire, char message[], int tailleMessage) {
-
-	int res = send(destinaire, message, tailleMessage, 0);
-
-	if (res == -1) {
-		perror("Erreur lors de l'envoi du message");
-	}
-	else {
-		printf("%d octets ont été envoyés\n", res);
-	}
+        int nbtotalsent = 0;
+        int res;
+        while(tailleMessage>nbtotalsent){
+                res = send(destinaire,message+nbtotalsent,tailleMessage,0);
+                if(res==-1){
+                        perror("Erreur lors de l'envoi du message");
+                        exit(1);
+                }else{
+                        nbtotalsent = nbtotalsent + res;
+                        printf("%d octets ont été envoyés\n", res);
+                }
+                
+        }
+     
 
 }
 

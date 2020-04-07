@@ -68,7 +68,9 @@ int main(int argc, char* argv[]) {
 			printf("Message : ");
 			gets(message);
 
-			res = send(dS, message, strlen(message), 0);
+			res = envoyerMessage(dS, message, strlen(message));
+
+			
 
 			if (res == -1) {
 				perror("Erreur lors de l'envoi");
@@ -79,7 +81,7 @@ int main(int argc, char* argv[]) {
 				}
 			}
 
-			res = recv(dS, message, sizeof(message), 0);
+			res = recv(dS, message, sizeof(message)+3, 0);
 
 			if (res == -1) {
 				perror("Erreur lors de l'envoi");
@@ -94,7 +96,7 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		else {
-			res = recv(dS, message, sizeof(message), 0);
+			res = recv(dS, message, sizeof(message)+3, 0);
 
 			if (res == -1) {
 				perror("Erreur lors de l'envoi");
@@ -135,4 +137,24 @@ int main(int argc, char* argv[]) {
 	}
 
 	return 0;
+}
+
+void envoyerMessage(int destinaire, char message[], int tailleMessage) {
+        int nbtotalsent = 0;
+        int res;
+        printf("%d,%d\n",tailleMessage,nbtotalsent );
+        while(tailleMessage>nbtotalsent){
+                res = send(destinaire,message+nbtotalsent,tailleMessage,0);
+                if(res==-1){
+                        perror("Erreur lors de l'envoi du message");
+                        exit(1);
+                }else{
+                        nbtotalsent = nbtotalsent + res;
+                        printf("%d octets ont été envoyés\n", res);
+
+                }
+                
+        }
+     
+
 }
