@@ -6,38 +6,18 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-
-int sendTCP(int sock, char *msg, int sizeOctet, int option){
-	int nbtotalsent = 0;
-	int res;
-	while(sizeOctet>nbtotalsent){
-		res = send(sock,msg+nbtotalsent,strlen(msg),0);
-		printf("%d\n", res);
-		if(res==-1){
-			return res;
-		}else{
-			nbtotalsent = nbtotalsent + res;
-		}
-		
-	}
-	return nbtotalsent;
-	
-}
-
-
-
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
 
 	if (argc != 3) {
 		printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");
-		exit(0);
+		exit(1);
 	}
 
 	int dS = socket(PF_INET, SOCK_STREAM, 0);
 
 	if (dS == -1) {
 		perror("Erreur dans la création de la socket");
-		exit(0);
+		exit(1);
 	}
 
 	struct sockaddr_in aS;
@@ -63,22 +43,96 @@ int main(int argc, char *argv[]) {
 	}
 	else {
 		printf("Connexion réussie\n");
+		printf("%d\n", res);
 	}
 
+	int numeroClient;
 
-	char message[100];
+	res = recv(dS, &numeroClient, sizeof(int), 0);
 
-	printf("Message : ");
-	scanf("%s",message);
-	res = sendTCP(dS, message, strlen(message)+1, 0);
-		
 	if (res == -1) {
-		perror("Erreur lors de l'envoi");
+		perror("Erreur lors de la réception du numéro de client");
+		exit(1);
 	}
 	else {
-		printf("%d caractères ont été envoyés\n", res);
-	}		
-	
+		printf("Vous êtes le client numéro %d\n", numeroClient);
+	}
+
+
+	while (1) {
+
+		char message[100];
+
+		if (numeroClient == 0) {
+
+			printf("Message : ");
+			gets(message);
+
+			res = send(dS, message, strlen(message), 0);
+
+			if (res == -1) {
+				perror("Erreur lors de l'envoi");
+			}
+			else {
+				if (strcmp(message, "fin\n") == 0) {
+					break;
+				}
+			}
+
+			res = recv(dS, message, sizeof(message), 0);
+
+			if (res == -1) {
+				perror("Erreur lors de l'envoi");
+			}
+			else {
+				if (strcmp(message, "fin\n") == 0) {
+					break;
+				}
+				else {
+					printf("Message reçu : %s\n", message);
+				}
+			}
+		}
+		else {
+			res = recv(dS, message, sizeof(message), 0);
+
+			if (res == -1) {
+				perror("Erreur lors de l'envoi");
+			}
+			else {
+				if (strcmp(message, "fin\n") == 0) {
+					break;
+				}
+				else {
+					printf("Message reçu : %s\n", message);
+				}
+			}
+
+			printf("Message : ");
+			gets(message);
+
+			res = send(dS, message, strlen(message), 0);
+
+			if (res == -1) {
+				perror("Erreur lors de l'envoi");
+			}
+			else {
+				if (strcmp(message, "fin\n") == 0) {
+					break;
+				}
+			}
+		}
+	}
+
+	res = close(dS);
+
+	if (res == -1) {
+		perror("Erreur close socket");
+		exit(1);
+	}
+	else {
+		printf("Fin client\n");
+	}
 
 	return 0;
 }
