@@ -6,14 +6,13 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-int main(int argc, char* argv[]) {
+#define TAILLE_MAX 250
 
-	if (argc != 3) {
-		printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");
-		exit(1);
-	}
+int dS;
 
-	int dS = socket(PF_INET, SOCK_STREAM, 0);
+void connexionSocket(int port, char* ip) {
+
+	dS = socket(PF_INET, SOCK_STREAM, 0);
 
 	if (dS == -1) {
 		perror("Erreur dans la création de la socket");
@@ -22,9 +21,9 @@ int main(int argc, char* argv[]) {
 
 	struct sockaddr_in aS;
 	aS.sin_family = AF_INET;
-	aS.sin_port = htons(atoi(argv[1]));
+	aS.sin_port = htons(port);
 
-	int res = inet_pton(AF_INET,argv[2],&(aS.sin_addr));
+	int res = inet_pton(AF_INET, ip, &(aS.sin_addr));
 	if (res == -1) {
 		perror("Erreur dans la création de la structure d'adresse réseau");
 		exit(0);
@@ -43,12 +42,15 @@ int main(int argc, char* argv[]) {
 	}
 	else {
 		printf("Connexion réussie\n");
-		printf("%d\n", res);
 	}
+}
+
+
+int receptionNumeroClient() {
 
 	int numeroClient;
 
-	res = recv(dS, &numeroClient, sizeof(int), 0);
+	int res = recv(dS, &numeroClient, sizeof(int), 0);
 
 	if (res == -1) {
 		perror("Erreur lors de la réception du numéro de client");
@@ -58,70 +60,119 @@ int main(int argc, char* argv[]) {
 		printf("Vous êtes le client numéro %d\n", numeroClient);
 	}
 
+	return numeroClient;
+}
+
+
+int envoyerMessage(int destinaire) {
+
+	char message[TAILLE_MAX];
+    int res;
+
+	printf("Message (maximum 250 caractères) : ");
+	gets(message);
+
+	// Envoi de la taille du message
+	int tailleMessage = strlen(message)+1;
+	res = send(destinaire, &tailleMessage, sizeof(int), 0);
+
+    int nbTotalSent = 0;
+
+    while(tailleMessage > nbTotalSent) {
+
+        res = send(destinaire, message+nbTotalSent, tailleMessage, 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du message");
+        }
+        else{
+            nbTotalSent += res;
+        }            
+    }
+
+    if (strcmp(message, "fin") == 0) {
+    	return 0;
+    }
+
+    return nbTotalSent;
+}
+
+int recevoirMessage(int expediteur) {
+
+	char message[TAILLE_MAX];
+	int tailleMessage;
+
+    int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de la réception de la taille du message");
+    }
+
+    int nbTotalRecv = 0;
+
+    while (nbTotalRecv < tailleMessage) {
+        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
+
+        if (res == -1) {
+            perror("Erreur lors de la réception du message");
+            memset(message, 0, sizeof(message));
+            break;
+        }
+        else {
+            nbTotalRecv += res;
+        }
+    }
+
+    printf("Message reçu : %s\n", message);
+
+    if (strcmp(message, "fin") == 0) {
+    	return 0;
+    }
+
+    return nbTotalRecv;
+}
+
+
+int main(int argc, char* argv[]) {
+
+	if (argc != 3) {
+		printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");
+		exit(1);
+	}
+
+	connexionSocket(atoi(argv[1]),argv[2]);
+
+	int numeroClient = receptionNumeroClient();
+
+	int res;
 
 	while (1) {
 
-		char message[100];
+		if (numeroClient == 1) {
 
-		if (numeroClient == 0) {
+			res = envoyerMessage(dS);
 
-			printf("Message : ");
-			gets(message);
-
-			res = envoyerMessage(dS, message, strlen(message));
-
-			
-
-			if (res == -1) {
-				perror("Erreur lors de l'envoi");
-			}
-			else {
-				if (strcmp(message, "fin\n") == 0) {
-					break;
-				}
+			if (res == 0) {
+				break;
 			}
 
-			res = recv(dS, message, sizeof(message)+3, 0);
+			res = recevoirMessage(dS);
 
-			if (res == -1) {
-				perror("Erreur lors de l'envoi");
-			}
-			else {
-				if (strcmp(message, "fin\n") == 0) {
-					break;
-				}
-				else {
-					printf("Message reçu : %s\n", message);
-				}
+			if (res == 0) {
+				break;
 			}
 		}
 		else {
-			res = recv(dS, message, sizeof(message)+3, 0);
+			res = recevoirMessage(dS);
 
-			if (res == -1) {
-				perror("Erreur lors de l'envoi");
-			}
-			else {
-				if (strcmp(message, "fin\n") == 0) {
-					break;
-				}
-				else {
-					printf("Message reçu : %s\n", message);
-				}
+			if (res == 0) {
+				break;
 			}
 
-			printf("Message : ");
-			gets(message);
+			res = envoyerMessage(dS);
 
-			res = send(dS, message, strlen(message), 0);
-
-			if (res == -1) {
-				perror("Erreur lors de l'envoi");
-			}
-			else {
-				if (strcmp(message, "fin\n") == 0) {
-					break;
-				}
+			if (res == 0) {
+				break;
 			}
 		}
 	}
@@ -137,24 +188,4 @@ int main(int argc, char* argv[]) {
 	}
 
 	return 0;
-}
-
-void envoyerMessage(int destinaire, char message[], int tailleMessage) {
-        int nbtotalsent = 0;
-        int res;
-        printf("%d,%d\n",tailleMessage,nbtotalsent );
-        while(tailleMessage>nbtotalsent){
-                res = send(destinaire,message+nbtotalsent,tailleMessage,0);
-                if(res==-1){
-                        perror("Erreur lors de l'envoi du message");
-                        exit(1);
-                }else{
-                        nbtotalsent = nbtotalsent + res;
-                        printf("%d octets ont été envoyés\n", res);
-
-                }
-                
-        }
-     
-
 }

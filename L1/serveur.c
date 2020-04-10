@@ -8,10 +8,13 @@
 #include <string.h>
 #include <signal.h>
 
+#define TAILLE_MAX 250
+
 
 int dS;
 int users[2];
-
+int tailleMessage;
+char message[TAILLE_MAX];
 
 void creerSocket(int port) {
 
@@ -42,31 +45,25 @@ void creerSocket(int port) {
     }
 }
 
-void connexionClients() {
+void connexionClients(int nbClients) {
 
 	int nbUsers = 0;
     int dSC;
     int res;
 
-    while(nbUsers < 2) {
+    while(nbUsers < nbClients) {
+
     	listen(dS,7);
         struct sockaddr_in aC;
-        socklen_t lg=sizeof(struct sockaddr_in);
+        socklen_t lg = sizeof(struct sockaddr_in);
 
-        dSC = accept(dS, (struct sockaddr*) &aC,&lg);
+        dSC = accept(dS, (struct sockaddr*) &aC, &lg);
 
-        if(dSC == -1) { 
+        if (dSC == -1) { 
         	perror("L'utilisateur n'a pas été accepté");
         }
         else {
         	users[nbUsers] = dSC;
-
-        	res = send(users[nbUsers], &nbUsers, sizeof(int), 0);
-
-        	if (res == -1) {
-        		perror("Erreur lors de l'envoi du numéro de client");
-        	}
-
 	       	nbUsers++;
 	        printf("L'utilisateur %d a été accepté\n", nbUsers);
         }
@@ -74,42 +71,86 @@ void connexionClients() {
 }
 
 
-void recevoirMessage(int expediteur, char message[100]) {
+void envoyerNumeroClient() {
 
-	int res = recv(expediteur, message, 100*sizeof(char), 0);
+    int numeroClient;
+    int res;
 
-	if (res == -1) {
-		perror("Erreur lors de la réception du message");
-	}
-	else {
-		printf("%d octets ont été reçus\n", res);
-	}
+    int nbUsers = sizeof(users)/sizeof(int);
 
+    for(int i = 0; i < nbUsers; i++) {
+        numeroClient = i+1;
+
+        res = send(users[i], &numeroClient, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du numéro de client");
+        }
+    }
 }
 
-void envoyerMessage(int destinaire, char message[], int tailleMessage) {
-        int nbtotalsent = 0;
-        int res;
-        while(tailleMessage>nbtotalsent){
-                res = send(destinaire,message+nbtotalsent,tailleMessage,0);
-                if(res==-1){
-                        perror("Erreur lors de l'envoi du message");
-                        exit(1);
-                }else{
-                        nbtotalsent = nbtotalsent + res;
-                        printf("%d octets ont été envoyés\n", res);
-                }
-                
-        }
-     
 
+int envoyerMessage(int destinaire) {
+
+    // Envoi de la taille du message
+    int tailleMessage = strlen(message)+1;
+    int res = send(destinaire, &tailleMessage, sizeof(int), 0);
+
+    int nbTotalSent = 0;
+
+    while(tailleMessage > nbTotalSent) {
+
+        res = send(destinaire, message+nbTotalSent, tailleMessage, 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du message");
+        }
+        else{
+            nbTotalSent += res;
+            printf("%d octets ont été envoyés\n", res);
+        }            
+    }
+
+    return nbTotalSent;
+}
+
+int recevoirMessage(int expediteur) {
+
+    int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de la réception de la taille du message");
+    }
+
+    int nbTotalRecv = 0;
+
+    while (nbTotalRecv < tailleMessage) {
+        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
+
+        if (res == -1) {
+            perror("Erreur lors de la réception du message");
+            memset(message, 0, sizeof(message));
+            break;
+        }
+        else {
+            nbTotalRecv += res;
+        }
+    }
+
+    if (strcmp(message, "fin") == 0) {
+        return 0;
+    }
+
+    return nbTotalRecv;
 }
 
 void fin() {
 
 	int res;
 
-	for(int i=0; i<sizeof(users); i++) {
+    int nbUsers = sizeof(users)/sizeof(int);
+
+	for(int i=0; i < nbUsers; i++) {
 		res = close(users[i]);
 
 		if (res == -1) {
@@ -135,28 +176,46 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-	creerSocket(atoi(argv[1]));
+    int res;
 
-	connexionClients();
-
-    printf("Attente de la réception d'un message\n");
-
-    char message[100];
-
+    creerSocket(atoi(argv[1]));
+    
     signal(SIGINT, fin);
 
-    while (1) {
+    do {
+        printf("En attente de clients\n");
 
-    	recevoirMessage(users[0], message);
-    	envoyerMessage(users[1], message, strlen(message)+1);
+        connexionClients(2);
+        envoyerNumeroClient();
 
-    	memset(message, 0, sizeof(message));
+        printf("Attente de la réception d'un message\n");
 
-    	recevoirMessage(users[1], message);
-    	envoyerMessage(users[0], message, strlen(message)+1);
 
-    	memset(message, 0, sizeof(message));
-    }
+        while (1) {
+
+            res = recevoirMessage(users[0]);
+
+            envoyerMessage(users[1]);
+
+            if (res == 0) {
+                break;
+            }
+
+            memset(message, 0, sizeof(message));
+
+            res = recevoirMessage(users[1]);
+
+            envoyerMessage(users[0]);
+
+            if (res == 0) {
+                break;
+            }
+
+            memset(message, 0, sizeof(message));
+        }
+    } while (1);
+
+    	
 
     return 0;
 }
