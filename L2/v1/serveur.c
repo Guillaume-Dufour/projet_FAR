@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <pthread.h>
 
-#define TAILLE_MAX 250
+#define TAILLE_MAX 1000
 
 
 int dS;
@@ -52,7 +52,6 @@ void connexionClients(int nbClients) {
 	int nbUsers = 0;
     int dSC;
     int res;
-
     while(nbUsers < nbClients) {
 
     	listen(dS,7);
@@ -225,6 +224,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, fini);
 
     do {
+        fin = 0;
         printf("En attente de clients\n");
 
         connexionClients(2);
@@ -242,9 +242,15 @@ int main(int argc, char* argv[]) {
             fprintf (stderr, "pthread_create error for thread 2\n");
             exit (1);
         }
-        //on attend qu'ils soient terminés avant de relancer le serveuret l'attente de clients
-        (void)pthread_join (th1, &ret);
-        (void)pthread_join (th2, &ret);
+        //on attend qu'ils soient terminés avant de relancer le serveur et l'attente de clients
+        if(pthread_join (th1, &ret) != 0){
+            perror("erreur dans l'attente du thread");
+            exit(1);
+        }
+        if(pthread_join (th2, &ret) != 0){
+            perror("erreur dans l'attente du thread");
+            exit(1);
+        }
             
         }while (1);
 
