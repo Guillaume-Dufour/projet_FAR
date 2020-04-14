@@ -1,0 +1,77 @@
+@startuml
+autonumber "<b>"
+actor Client1
+actor Client2
+
+loop Tous les clients sont connectés
+    activate Serveur
+    Serveur --> Serveur : Attente clients
+    activate Client1
+    activate Client2
+    Client1 --> Serveur : Connecté
+    Client2 --> Serveur : Connecté
+    Serveur --> Serveur : Prêt
+    
+    loop Tous les clients sont connectés, TANT QUE MESSAGE =! FIN
+        
+        Serveur --> Serveur : Attente message
+        
+        loop Tous les messages sont bien transmis
+
+            alt Client1, thread envoi
+                Client1 --> Serveur : Envoi taille message
+                Client1 --> Serveur : Envoi message
+            end
+            alt Client2, thread réception
+            Client2 --> Client2 : Attente message
+            end
+            Serveur --> Client2 : Transmission message
+            alt Client2, thread envoi
+                Client2 --> Serveur : Envoi taille message
+                Client2 --> Serveur : Envoi message
+            end
+            alt Client1, thread réception
+                Client1 --> Client1 : Attente message
+            end
+            Serveur --> Client1 : Transmission message
+            
+        else MESSAGE=FIN
+            alt Client1, thread envoi
+                Client1 --> Serveur : Envoi taille message
+                Client1 --> Serveur : Envoi message fin
+                
+                destroy Client1
+            end
+            alt Client2, thread réception
+                Client2 --> Client2 : Attente message
+            end
+            Serveur --> Client2 : Transmission message fin
+            
+            destroy Client2
+
+            
+        end
+        
+        
+        else Erreur envoi message
+          alt Client1, thread envoi    
+                Client1 --> Serveur : Erreur envoi message
+                activate Client1
+                destroy Client1
+          end
+    end
+     
+    else Erreur connexion
+    
+    Serveur --> Serveur : Attente des clients 
+     activate Client1
+    activate Client2  
+    Client1 --> Serveur : Erreur connexion client
+    destroy Client1
+    destroy Client2
+
+    deactivate Serveur
+    destroy Serveur
+end
+
+@enduml
