@@ -7,25 +7,28 @@
 #include <sys/types.h>
 #include <string.h>
 #include <signal.h>
+#include <pthread.h>
 
 #define TAILLE_MAX 250
 
 
 int dS;
-int users[2];
+int users[100];//jusqu'a 100 participants
+int nbusers = 0;
 int tailleMessage;
 char message[TAILLE_MAX];
+int fin=0;//variable qui va servir à arrêter les threads
 
 void creerSocket(int port) {
 
-	dS = socket(PF_INET,SOCK_STREAM,0);
+    dS = socket(PF_INET,SOCK_STREAM,0);
     
     if(dS == -1) {
-    	perror("Erreur lors de la création de la socket");
-    	exit(1);
+        perror("Erreur lors de la création de la socket");
+        exit(1);
     }
     else {
-    	printf("Création de la socket OK\n");
+        printf("Création de la socket OK\n");
     }
 
     struct sockaddr_in ad;
@@ -33,39 +36,39 @@ void creerSocket(int port) {
     ad.sin_addr.s_addr = INADDR_ANY;
     ad.sin_port = htons(port);
 
-   	int res = bind(dS, (struct sockaddr*)&ad, sizeof(struct sockaddr_in));
+    int res = bind(dS, (struct sockaddr*)&ad, sizeof(struct sockaddr_in));
     
     if(res == -1){
-    	perror("Erreur lors du bind");
-    	exit(1);
+        perror("Erreur lors du bind");
+        exit(1);
     }
     else {
-    	printf("bind OK\n");
-    	printf("Serveur en écoute\n");
+        printf("bind OK\n");
+        printf("Serveur en écoute\n");
     }
 }
 
 void connexionClients(int nbClients) {
 
-	int nbUsers = 0;
+    int nbUsers = 0;
     int dSC;
     int res;
 
     while(nbUsers < nbClients) {
 
-    	listen(dS,7);
+        listen(dS,7);
         struct sockaddr_in aC;
         socklen_t lg = sizeof(struct sockaddr_in);
 
         dSC = accept(dS, (struct sockaddr*) &aC, &lg);
 
         if (dSC == -1) { 
-        	perror("L'utilisateur n'a pas été accepté");
+            perror("L'utilisateur n'a pas été accepté");
         }
         else {
-        	users[nbUsers] = dSC;
-	       	nbUsers++;
-	        printf("L'utilisateur %d a été accepté\n", nbUsers);
+            users[nbUsers] = dSC;
+            nbUsers++;
+            printf("L'utilisateur %d a été accepté\n", nbUsers);
         }
     }
 }
@@ -76,9 +79,7 @@ void envoyerNumeroClient() {
     int numeroClient;
     int res;
 
-    int nbUsers = sizeof(users)/sizeof(int);
-
-    for(int i = 0; i < nbUsers; i++) {
+    for(int i = 0; i < nbusers; i++) {
         numeroClient = i+1;
 
         res = send(users[i], &numeroClient, sizeof(int), 0);
@@ -144,88 +145,100 @@ int recevoirMessage(int expediteur) {
     return nbTotalRecv;
 }
 
-void fin() {
-
-	int res;
-
-    int nbUsers = sizeof(users)/sizeof(int);
-
-	for(int i=0; i < nbUsers; i++) {
-		res = close(users[i]);
-
-		if (res == -1) {
-			perror("Erreur lors du close socket clients");
-		}
-	}
-
-	res = close(dS);
-
-	if (res == -1) {
-		perror("Erreur lors du close socket serveur");
-	}
-
-	printf("Fin serveur\n");
-
-	exit(0);
-}
-
-int main(int argc, char* argv[]) {
-
-	if (argc != 2) {
-		printf("Le nombre de paramètres doit être de 1 (PORT)\n");
-		exit(1);
-	}
+void fini() {
 
     int res;
 
-    creerSocket(atoi(argv[1]));
+    int nbUsers = sizeof(users)/sizeof(int);
+
+    for(int i=0; i < nbUsers; i++) {
+        res = close(users[i]);
+
+        if (res == -1) {
+            perror("Erreur lors du close socket clients");
+        }
+    }
+
+    res = close(dS);
+
+    if (res == -1) {
+        perror("Erreur lors du close socket serveur");
+    }
+
+    printf("Fin serveur\n");
+
+    exit(0);
+}
+
+void *user (void * arg)//pour le thread qui reçoit de l'utilisateur 0 et qui envoi à l'utilisateur 1
+{
+    int res;
+    while (1) {
+        if (fin == 1)
+            {
+                break;
+            }
+
+        res = recevoirMessage(users[0]);
+        envoyerMessage(users[1]);
+        if (res == 0 || fin == 1) {
+            fin =1;
+            break;
+        }
+       memset(message, 0, sizeof(message));
+    }
+
+    pthread_exit (0);
+}
+
+
+int main(int argc, char* argv[]) {
+
+    if (argc != 3) {
+        printf("Le nombre de paramètres doit être de 2 (PORT puis nb de participants)\n");
+        exit(1);
+    }
 
     
-    signal(SIGINT, fin);
+    nbusers = atoi(argv[1]);
+    creerSocket(nbusers);
+    
+    signal(SIGINT, fini);
 
     do {
         printf("En attente de clients\n");
 
-        connexionClients(1);
-        connexionClients(1);    
+        connexionClients(atoi(argv[1]));
         envoyerNumeroClient();
 
         printf("Attente de la réception d'un message\n");
+        pthread_t th;
+        for (int i = 0; i < nbusers; ++i)
+        {   
 
-        int pid;
-        if ((pid = fork()) == 0) {
-            while (1) {
-
-                res = recevoirMessage(users[0]);
-
-                envoyerMessage(users[1]);
-
-                if (res == 0) {
-                    break;
-                }
-                memset(message, 0, sizeof(message));
+             if (pthread_create (&th, NULL, user, i) < 0) {
+                fprintf (stderr, "pthread_create error for thread 1\n");
+                exit (1);
             }
-        }else{
-            while(1){
-                res = recevoirMessage(users[1]);
-
-                envoyerMessage(users[0]);
-
-                if (res == 0) {
-                    break;
-                }
-
-                memset(message, 0, sizeof(message));
-            }
-                
         }
 
-            
-
+        /*pthread_t th1, th2;//on créé les 2 threads
+        void *ret;
+        if (pthread_create (&th1, NULL, user1, "1") < 0) {
+            fprintf (stderr, "pthread_create error for thread 1\n");
+            exit (1);
+        }
+        if (pthread_create (&th2, NULL, user2, "2") < 0) {
+            fprintf (stderr, "pthread_create error for thread 2\n");
+            exit (1);
+        }
+        //on attend qu'ils soient terminés avant de relancer le serveuret l'attente de clients
+        (void)pthread_join (th1, &ret);
+        (void)pthread_join (th2, &ret);*/
             
         }while (1);
 
-    	
+        
 
     return 0;
 }
