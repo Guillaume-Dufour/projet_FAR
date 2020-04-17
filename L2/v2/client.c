@@ -6,9 +6,12 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-#define TAILLE_MAX 250
+#define TAILLE_MAX 1000
 
+char pseudo[20];
+char pseudoExpediteur[20];
 int dS;
+int fin = 0;
 
 void connexionSocket(int port, char* ip) {
 
@@ -101,7 +104,6 @@ int recevoirMessage(int expediteur) {
 
 	char message[TAILLE_MAX];
 	int tailleMessage;
-
     int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
 
     if (res == -1) {
@@ -123,7 +125,7 @@ int recevoirMessage(int expediteur) {
         }
     }
 
-    printf("Message reçu : %s\n", message);
+    printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
 
     if (strcmp(message, "fin") == 0) {
     	return 0;
@@ -132,6 +134,50 @@ int recevoirMessage(int expediteur) {
     return nbTotalRecv;
 }
 
+void *envoyer (void * arg) //pour le thread qui envoi un message
+{   
+    int res;
+    while(1) {
+		if (fin == 1) {
+			break;
+		}
+
+		res = envoyerMessage(dS);
+		if (res == 0 || fin ==1) {
+			fin = 1;
+			break;
+		}
+	}
+	
+	pthread_exit (0);
+}
+void *recevoir (void * arg)//pour le thread qui reçoit un message
+{   
+    int res;
+
+    while(1){
+    	if (fin == 1) {
+    		break;
+    	}
+
+    	res = recv(dS, &pseudoExpediteur, sizeof(pseudoExpediteur), 0);
+
+		res = recevoirMessage(dS);
+
+		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
+
+		if (res == 0 || fin == 1 ) {
+			if(fin !=1){
+				printf("fin de l'échange appuyez sur entrée pour terminer \n");
+			}
+		
+			fin = 1;
+			break;
+		}
+	}
+	
+	pthread_exit (0);
+}
 
 int main(int argc, char* argv[]) {
 
@@ -142,36 +188,31 @@ int main(int argc, char* argv[]) {
 
 	connexionSocket(atoi(argv[1]),argv[2]);
 
+	printf("Entrez votre pseudo : ");
+	gets(pseudo);
+
+	send(dS, pseudo, strlen(pseudo), 0);
+
 	int numeroClient = receptionNumeroClient();
 
 	int res;
 
+	pthread_t th1, th2;//on créé les 2 threads
+	void *ret;
+	if (pthread_create (&th1, NULL, recevoir, "1") < 0) {
+        fprintf (stderr, "erreur creation du thread 1\n");
+        exit (1);
+    }
+    if (pthread_create (&th2, NULL, envoyer, "2") < 0) {
+        fprintf (stderr, "erreur creation du thread 2\n");
+        exit (1);
+    }
 	
+	//on attend que ceux-ci soient terminés
+  	(void)pthread_join(th1, &ret);
+  	(void)pthread_join(th2, &ret);
 
-	int pid;
-	//si je suis le fils
-	if ((pid = fork()) == 0) {
-		while(1){
-			res = envoyerMessage(dS);
-			if (res == 0) {
-				break;
-			}
-		}
-		
-
-	}else{//si je suis le père
-
-		while(1){
-			res = recevoirMessage(dS);
-			if (res == 0) {
-				break;
-			}
-		}
-		
-	}
-	
-
-	res = close(dS);
+  	res = close(dS);
 
 	if (res == -1) {
 		perror("Erreur close socket");

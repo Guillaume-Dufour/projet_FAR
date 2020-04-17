@@ -13,11 +13,12 @@
 
 
 int dS;
-int users[100];//jusqu'a 100 participants
-int nbusers = 0;
+int users[100]; //jusqu'a 100 participants
+char pseudos[100][20];
+int nbUsers;
 int tailleMessage;
 char message[TAILLE_MAX];
-int fin=0;//variable qui va servir à arrêter les threads
+int fin = 0;//variable qui va servir à arrêter les threads
 
 void creerSocket(int port) {
 
@@ -56,6 +57,8 @@ void connexionClients(int nbClients) {
 
     while(nbUsers < nbClients) {
 
+        memset(pseudos[nbUsers], 0, sizeof(pseudos[nbUsers]));
+
         listen(dS,7);
         struct sockaddr_in aC;
         socklen_t lg = sizeof(struct sockaddr_in);
@@ -67,8 +70,16 @@ void connexionClients(int nbClients) {
         }
         else {
             users[nbUsers] = dSC;
-            nbUsers++;
-            printf("L'utilisateur %d a été accepté\n", nbUsers);
+
+            res = recv(users[nbUsers], pseudos[nbUsers], 20, 0);
+
+            if (res == -1) {
+                perror("Erreur lors de la recéption du pseudo");
+            }
+            else {
+                nbUsers++;
+                printf("L'utilisateur n°%d (%s) a été accepté\n", nbUsers, pseudos[nbUsers-1]);
+            }
         }
     }
 }
@@ -79,7 +90,7 @@ void envoyerNumeroClient() {
     int numeroClient;
     int res;
 
-    for(int i = 0; i < nbusers; i++) {
+    for(int i = 0; i < nbUsers; i++) {
         numeroClient = i+1;
 
         res = send(users[i], &numeroClient, sizeof(int), 0);
@@ -89,7 +100,6 @@ void envoyerNumeroClient() {
         }
     }
 }
-
 
 int envoyerMessage(int destinaire) {
 
@@ -106,7 +116,7 @@ int envoyerMessage(int destinaire) {
         if (res == -1) {
             perror("Erreur lors de l'envoi du message");
         }
-        else{
+        else {
             nbTotalSent += res;
             printf("%d octets ont été envoyés\n", res);
         }            
@@ -149,8 +159,6 @@ void fini() {
 
     int res;
 
-    int nbUsers = sizeof(users)/sizeof(int);
-
     for(int i=0; i < nbUsers; i++) {
         res = close(users[i]);
 
@@ -170,22 +178,37 @@ void fini() {
     exit(0);
 }
 
-void *user (void * arg)//pour le thread qui reçoit de l'utilisateur 0 et qui envoi à l'utilisateur 1
-{
+// Pour le thread qui reçoit de l'utilisateur 0 et qui envoi à l'utilisateur 1
+void *user (void* arg) {
     int res;
     while (1) {
-        if (fin == 1)
-            {
-                break;
-            }
+        if (fin == 1) {
+            break;
+        }
 
-        res = recevoirMessage(users[0]);
-        envoyerMessage(users[1]);
+        int expediteur = (int) arg;
+
+        res = recevoirMessage(users[expediteur]);
+
+        // Envoi du pseudo de l'expéditeur et du message à tous les autres clients
+        for (int i = 0; i < nbUsers; i++) {
+            if (i != expediteur) {
+
+                //Envoi du pseudo de l'expéditeur
+                send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
+
+                //Envoi du mess
+                envoyerMessage(users[i]);
+            }
+        }
+            
+
         if (res == 0 || fin == 1) {
             fin =1;
             break;
         }
-       memset(message, 0, sizeof(message));
+
+        memset(message, 0, sizeof(message));
     }
 
     pthread_exit (0);
@@ -198,47 +221,42 @@ int main(int argc, char* argv[]) {
         printf("Le nombre de paramètres doit être de 2 (PORT puis nb de participants)\n");
         exit(1);
     }
-
     
-    nbusers = atoi(argv[1]);
-    creerSocket(nbusers);
+    int port = atoi(argv[1]);
+    nbUsers = atoi(argv[2]);
+
+    creerSocket(port);
     
     signal(SIGINT, fini);
 
     do {
+
+        fin = 0;
+
         printf("En attente de clients\n");
 
-        connexionClients(atoi(argv[1]));
+        connexionClients(nbUsers);
         envoyerNumeroClient();
 
         printf("Attente de la réception d'un message\n");
-        pthread_t th;
-        for (int i = 0; i < nbusers; ++i)
-        {   
 
-             if (pthread_create (&th, NULL, user, i) < 0) {
-                fprintf (stderr, "pthread_create error for thread 1\n");
-                exit (1);
+        pthread_t th[nbUsers];
+
+        for (int i = 0; i < nbUsers; i++) {
+            if (pthread_create (&th[i], NULL, user, (void *) i) < 0) {
+                perror("Erreur à la création des threads");
+                exit(1);
             }
         }
 
-        /*pthread_t th1, th2;//on créé les 2 threads
-        void *ret;
-        if (pthread_create (&th1, NULL, user1, "1") < 0) {
-            fprintf (stderr, "pthread_create error for thread 1\n");
-            exit (1);
-        }
-        if (pthread_create (&th2, NULL, user2, "2") < 0) {
-            fprintf (stderr, "pthread_create error for thread 2\n");
-            exit (1);
-        }
-        //on attend qu'ils soient terminés avant de relancer le serveuret l'attente de clients
-        (void)pthread_join (th1, &ret);
-        (void)pthread_join (th2, &ret);*/
-            
-        }while (1);
+        void* ret;
 
-        
+        //on attend qu'ils soient terminés avant de relancer le serveur et l'attente de clients
+        for (int i = 0; i < nbUsers; i++) {
+            (void)pthread_join (th[i], &ret);
+        }
+            
+    } while (1);        
 
     return 0;
 }
