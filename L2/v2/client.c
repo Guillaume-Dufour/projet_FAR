@@ -6,13 +6,15 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-#define TAILLE_MAX 1000
+#define TAILLE_MAX 1001 // Taille maximum d'un message
 
-char pseudo[20];
-char pseudoExpediteur[20];
+// Variables globales
+char pseudo[21]; // Pseudo du client
+char pseudoExpediteur[20]; // Pseudo de l'expéditeur du message
 int dS;
-int fin = 0;
+int fin = 0; // Variable pour savoir si le client doit s'arrêter
 
+// Fonction de création de la socket et connexion à la socket
 void connexionSocket(int port, char* ip) {
 
 	dS = socket(PF_INET, SOCK_STREAM, 0);
@@ -48,7 +50,7 @@ void connexionSocket(int port, char* ip) {
 	}
 }
 
-
+// Fonction permettant de recevoir son numéro de client
 int receptionNumeroClient() {
 
 	int numeroClient;
@@ -66,21 +68,33 @@ int receptionNumeroClient() {
 	return numeroClient;
 }
 
-
+// Fonction permettant d'envoyer un message
 int envoyerMessage(int destinaire) {
 
 	char message[TAILLE_MAX];
     int res;
 
+	// Saisie du message
+    do {
+    	if (strlen(message) >= 1000) {
+    		printf("Votre message est trop long (1000 caractères maximum)\n");
+    	}
 
-	gets(message);
+		gets(message);
+
+    } while (strlen(message) >= 1000);
 
 	// Envoi de la taille du message
 	int tailleMessage = strlen(message)+1;
 	res = send(destinaire, &tailleMessage, sizeof(int), 0);
 
+	if (res == -1) {
+		perror("Erreur lors de l'envoi de la taille du message");
+	}
+
     int nbTotalSent = 0;
 
+    // Envoi du message par packet si le message est trop grand pour le buffer
     while(tailleMessage > nbTotalSent) {
 
         res = send(destinaire, message+nbTotalSent, tailleMessage, 0);
@@ -93,6 +107,7 @@ int envoyerMessage(int destinaire) {
         }            
     }
 
+    // Si "fin" est envoyé, le client est arrêté
     if (strcmp(message, "fin") == 0) {
     	return 0;
     }
@@ -100,9 +115,11 @@ int envoyerMessage(int destinaire) {
     return nbTotalSent;
 }
 
+// Fonction permettant de recevoir un message
 int recevoirMessage(int expediteur) {
 
 	char message[TAILLE_MAX];
+	// Réception de la taille du message permettant de savoir quand tout le message sera reçu
 	int tailleMessage;
     int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
 
@@ -112,6 +129,7 @@ int recevoirMessage(int expediteur) {
 
     int nbTotalRecv = 0;
 
+    // Réception du message par packet si le message est trop grand pour le buffer
     while (nbTotalRecv < tailleMessage) {
         res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
 
@@ -127,6 +145,7 @@ int recevoirMessage(int expediteur) {
 
     printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
 
+    // Si "fin" est reçu, le client est arrêté
     if (strcmp(message, "fin") == 0) {
     	return 0;
     }
@@ -134,25 +153,31 @@ int recevoirMessage(int expediteur) {
     return nbTotalRecv;
 }
 
-void *envoyer (void * arg) //pour le thread qui envoi un message
-{   
+// Fonction pour le thread qui envoie un message
+void *envoyer (void * arg) {   
+
     int res;
+
     while(1) {
 		if (fin == 1) {
 			break;
 		}
 
 		res = envoyerMessage(dS);
+
+		// On stoppe le thread quand on envoie "fin" 
 		if (res == 0 || fin ==1) {
 			fin = 1;
 			break;
 		}
 	}
 	
-	pthread_exit (0);
+	pthread_exit(0);
 }
-void *recevoir (void * arg)//pour le thread qui reçoit un message
-{   
+
+//Fonction pour le thread qui reçoit un message
+void *recevoir (void * arg) {
+
     int res;
 
     while(1){
@@ -162,12 +187,17 @@ void *recevoir (void * arg)//pour le thread qui reçoit un message
 
     	res = recv(dS, &pseudoExpediteur, sizeof(pseudoExpediteur), 0);
 
+    	if (res == -1) {
+    		perror("Erreur lors de la réception du pseudo de l'expéditeur");
+    	}
+
 		res = recevoirMessage(dS);
 
+		// On efface le pseudo de l'expéditeur
 		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
 
 		if (res == 0 || fin == 1 ) {
-			if(fin !=1){
+			if(fin !=1) {
 				printf("fin de l'échange appuyez sur entrée pour terminer \n");
 			}
 		
@@ -176,41 +206,68 @@ void *recevoir (void * arg)//pour le thread qui reçoit un message
 		}
 	}
 	
-	pthread_exit (0);
+	pthread_exit(0);
 }
 
 int main(int argc, char* argv[]) {
 
+	// Vérification du nombre d'arguments
 	if (argc != 3) {
 		printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");
 		exit(1);
 	}
 
-	connexionSocket(atoi(argv[1]),argv[2]);
+	// Saisie du pseudo
+	do {
+		if (strlen(pseudo) >= 20) {
+			printf("Votre pseudo est trop long (20 caractères maximum)\n");
+		}
 
-	printf("Entrez votre pseudo : ");
-	gets(pseudo);
+		printf("Entrez votre pseudo : ");
+		gets(pseudo);
 
-	send(dS, pseudo, strlen(pseudo), 0);
+	} while (strlen(pseudo) >= 20);
 
-	int numeroClient = receptionNumeroClient();
+	int port = atoi(argv[1]);
+	char* ip = argv[2];
+
+	connexionSocket(port, ip);
 
 	int res;
 
-	pthread_t th1, th2;//on créé les 2 threads
+	// Envoi du pseudo au serveur
+	res = send(dS, pseudo, strlen(pseudo), 0);
+
+	if (res == -1) {
+		perror("Erreur lors de l'envoi du pseudo");
+	}
+
+	int numeroClient = receptionNumeroClient();
+
+	// Création des 2 threads
+	pthread_t th1, th2;
 	void *ret;
-	if (pthread_create (&th1, NULL, recevoir, "1") < 0) {
-        fprintf (stderr, "erreur creation du thread 1\n");
-        exit (1);
+
+	if (pthread_create(&th1, NULL, recevoir, "1") < 0) {
+        perror("Erreur lors de la création du thread 1");
+        exit(1);
     }
-    if (pthread_create (&th2, NULL, envoyer, "2") < 0) {
-        fprintf (stderr, "erreur creation du thread 2\n");
-        exit (1);
+    
+    if (pthread_create(&th2, NULL, envoyer, "2") < 0) {
+        perror("Erreur lors de la création du thread 2");
+        exit(1);
     }
 	
-	//on attend que ceux-ci soient terminés
-  	(void)pthread_join(th1, &ret);
-  	(void)pthread_join(th2, &ret);
+	// On attend que les deux threads soient terminés
+  	if (pthread_join(th1, &ret) != 0){
+  		perror("Erreur dans l'attente du thread");
+  		exit(1);
+  	}
+
+  	if (pthread_join(th2, &ret) != 0){
+  		perror("Erreur dans l'attente du thread");
+  		exit(1);
+  	}
 
   	res = close(dS);
 
