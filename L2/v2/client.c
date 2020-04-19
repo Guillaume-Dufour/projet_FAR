@@ -10,7 +10,7 @@
 
 // Variables globales
 char pseudo[21]; // Pseudo du client
-char pseudoExpediteur[20]; // Pseudo de l'expéditeur du message
+char pseudoExpediteur[21]; // Pseudo de l'expéditeur du message
 int dS;
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
 
@@ -259,15 +259,15 @@ int main(int argc, char* argv[]) {
     }
 	
 	// On attend que les deux threads soient terminés
-  	if (pthread_join(th1, &ret) != 0){
+	if (pthread_join(th2, &ret) != 0){
   		perror("Erreur dans l'attente du thread");
   		exit(1);
   	}
 
-  	if (pthread_join(th2, &ret) != 0){
+  	if (pthread_join(th1, &ret) != 0){
   		perror("Erreur dans l'attente du thread");
   		exit(1);
-  	}
+  	}  	
 
   	res = close(dS);
 

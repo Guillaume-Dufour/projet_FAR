@@ -18,7 +18,7 @@ char pseudos[100][21]; // Pseudos des clients
 int nbUsers; // Nombre de clients
 int tailleMessage; // Taille du message à envoyer
 char message[TAILLE_MAX];
-int fin = 0;//variable qui va servir à arrêter les threads
+int fin = 0; // Variable qui va servir à arrêter les threads
 
 // Fonction de création de la socket
 void creerSocket(int port) {
@@ -211,13 +211,17 @@ void *user (void* arg) {
             if (i != expediteur) {
 
                 //Envoi du pseudo de l'expéditeur
-                send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
+                int res2 = send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
 
-                //Envoi du message
-                envoyerMessage(users[i]);
+                if (res2 == -1) {
+                    perror("Erreur dans le l'envoi du pseudo");
+                }
+                else {
+                    //Envoi du message
+                    envoyerMessage(users[i]);
+                }                
             }
-        }
-            
+        }            
 
         if (res == 0 || fin == 1) {
             fin = 1;
@@ -241,7 +245,7 @@ int main(int argc, char* argv[]) {
     }
     
     int port = atoi(argv[1]);
-    nbUsers = atoi(argv[2]);
+    int nbClients = atoi(argv[2]);
 
     creerSocket(port);
     
@@ -253,7 +257,7 @@ int main(int argc, char* argv[]) {
 
         printf("En attente de clients\n");
 
-        connexionClients(nbUsers);
+        connexionClients(nbClients);
         envoyerNumeroClient();
 
         printf("Attente de la réception d'un message\n");
