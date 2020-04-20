@@ -111,7 +111,7 @@ int envoyerMessage(int destinaire) {
     if (strcmp(message, "fin") == 0) {
     	return 0;
     }
-
+    printf("message envoyé\n");
     return nbTotalSent;
 }
 
@@ -146,9 +146,9 @@ int recevoirMessage(int expediteur) {
     printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
 
     // Si "fin" est reçu, le client est arrêté
-    if (strcmp(message, "fin") == 0) {
+    /*if (strcmp(message, "fin") == 0) {
     	return 0;
-    }
+    }*/
 
     return nbTotalRecv;
 }
@@ -171,7 +171,7 @@ void *envoyer (void * arg) {
 			break;
 		}
 	}
-	
+	printf("fin de la communication\n");
 	pthread_exit(0);
 }
 
@@ -195,15 +195,6 @@ void *recevoir (void * arg) {
 
 		// On efface le pseudo de l'expéditeur
 		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
-
-		if (res == 0 || fin == 1 ) {
-			if(fin !=1) {
-				printf("fin de l'échange appuyez sur entrée pour terminer \n");
-			}
-		
-			fin = 1;
-			break;
-		}
 	}
 	
 	pthread_exit(0);
@@ -263,11 +254,6 @@ int main(int argc, char* argv[]) {
   		perror("Erreur dans l'attente du thread");
   		exit(1);
   	}
-
-  	if (pthread_join(th1, &ret) != 0){
-  		perror("Erreur dans l'attente du thread");
-  		exit(1);
-  	}  	
 
   	res = close(dS);
 

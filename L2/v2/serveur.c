@@ -10,15 +10,17 @@
 #include <pthread.h>
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
+#define NB_CLIENT_MAX 100 //nb max de clients
 
 // Variables globales
 int dS; // Socket du serveur
-int users[100]; // Sockets des clients (100 maximum)
-char pseudos[100][21]; // Pseudos des clients
+int users[NB_CLIENT_MAX]; // Sockets des clients (100 maximum)
+char pseudos[NB_CLIENT_MAX][21]; // Pseudos des clients
 int nbUsers; // Nombre de clients
 int tailleMessage; // Taille du message à envoyer
 char message[TAILLE_MAX];
 int fin = 0; // Variable qui va servir à arrêter les threads
+pthread_t th[NB_CLIENT_MAX];//tableau de threads pour chaque client
 
 // Fonction de création de la socket
 void creerSocket(int port) {
@@ -50,44 +52,7 @@ void creerSocket(int port) {
     }
 }
 
-// Fonction permettant que les clients se connectent
-void connexionClients(int nbClients) {
 
-    nbUsers = 0;
-    int dSC;
-    int res;
-
-    while(nbUsers < nbClients) {
-
-        // On efface le pseudo du client précédent (utile dans le cas où une conversation est relancée)
-        memset(pseudos[nbUsers], 0, sizeof(pseudos[nbUsers]));
-
-        listen(dS, nbClients);
-        struct sockaddr_in aC;
-        socklen_t lg = sizeof(struct sockaddr_in);
-
-        dSC = accept(dS, (struct sockaddr*) &aC, &lg);
-
-        if (dSC == -1) { 
-            perror("L'utilisateur n'a pas été accepté");
-        }
-        else {
-            // On met la socket du client dans le tableau
-            users[nbUsers] = dSC;
-
-            // Réception du pseudo du client
-            res = recv(users[nbUsers], pseudos[nbUsers], 20, 0);
-
-            if (res == -1) {
-                perror("Erreur lors de la réception du pseudo");
-            }
-            else {
-                nbUsers++;
-                printf("L'utilisateur n°%d (%s) a été accepté\n", nbUsers, pseudos[nbUsers-1]);
-            }
-        }
-    }
-}
 
 // Envoi aux clients de leur numéro
 void envoyerNumeroClient() {
@@ -163,9 +128,9 @@ int recevoirMessage(int expediteur) {
     }
 
     // Si "fin" est reçu
-    if (strcmp(message, "fin") == 0) {
+    /*if (strcmp(message, "fin") == 0) {
         return 0;
-    }
+    }*/
 
     return nbTotalRecv;
 }
@@ -204,27 +169,43 @@ void *user (void* arg) {
 
         int expediteur = (int) arg;
 
+        printf("expediteur :%d\n",users[expediteur] );
         res = recevoirMessage(users[expediteur]);
 
+        int envoye=0;
+        int i = 0;
         // Envoi du pseudo de l'expéditeur et du message à tous les autres clients
-        for (int i = 0; i < nbUsers; i++) {
-            if (i != expediteur) {
-
+        while (envoye < nbUsers-1){
+            if (i != expediteur && users[i]!=-1) {
+                
                 //Envoi du pseudo de l'expéditeur
-                int res2 = send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
-
-                if (res2 == -1) {
-                    perror("Erreur dans le l'envoi du pseudo");
-                }
-                else {
-                    //Envoi du message
-                    envoyerMessage(users[i]);
-                }                
+                    int res2 = send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
+                    if (res2 == -1) {
+                        perror("Erreur dans le l'envoi du pseudo");
+                    }
+                    else {
+                        printf("nombre users %d\n",nbUsers );
+                        printf("envoi\n");
+                        //Envoi du message
+                        envoyerMessage(users[i]);
+                        envoye++;
+                    }
+                    
+                             
             }
+            
+            i++;
+            
+            
+            
         }            
-
-        if (res == 0 || fin == 1) {
-            fin = 1;
+        
+        if (strcmp(message, "fin") == 0) {
+            users[expediteur]=-1;
+            // On efface le pseudo du client précédent (utile dans le cas où une conversation est relancée)
+            memset(pseudos[expediteur], 0, sizeof(pseudos[expediteur]));
+            nbUsers--;
+            memset(message, 0, sizeof(message));
             break;
         }
 
@@ -234,13 +215,73 @@ void *user (void* arg) {
 
     pthread_exit(0);
 }
+int indiceCaseLibre(){
+    for (int i = 0; i < nbUsers; i++)
+    {
+        if(users[i] == -1){
+            return i;
+        }
+    }
+    return nbUsers;
+}
+
+// Fonction permettant que les clients se connectent
+void *connexionClients(void* arg) {
+    
+    nbUsers = 0;
+    int nbClients = (int) arg;
+    int dSC;
+    int res;
+    int position;
+    while(1){
+        position = indiceCaseLibre();
+        
+        listen(dS, nbClients);
+        struct sockaddr_in aC;
+        socklen_t lg = sizeof(struct sockaddr_in);
+
+        dSC = accept(dS, (struct sockaddr*) &aC, &lg);
+
+        if (dSC == -1) { 
+            perror("L'utilisateur n'a pas été accepté");
+        }
+        else {
+            position = indiceCaseLibre();
+            // On met la socket du client dans le tableau
+            users[position] = dSC;
+
+            // Réception du pseudo du client
+            res = recv(users[position], pseudos[position], 20, 0);
+
+            if (res == -1) {
+                perror("Erreur lors de la réception du pseudo");
+            }
+            else {
+                res = send(users[position], &position, sizeof(int), 0);
+                if (res == -1) {
+                    perror("Erreur lors de l'envoi du numéro de client");
+                }
+                if (pthread_create (&th[position], NULL, user, (void *) position) < 0) {
+                    perror("Erreur à la création des threads");
+                exit(1);
+                }
+                nbUsers++;
+                printf("L'utilisateur n°%d (%s) a été accepté\n", position, pseudos[position]);
+            }
+
+            
+        }
+    }
+
+        
+}
 
 
 int main(int argc, char* argv[]) {
 
     // Vérification du nombre d'arguments
     if (argc != 3) {
-        printf("Le nombre de paramètres doit être de 2 (PORT puis nb de participants)\n");
+        printf("Le nombre de paramètres doit être de 2 (PORT puis nb de participants max)\n");
         exit(1);
     }
     
@@ -254,16 +295,20 @@ int main(int argc, char* argv[]) {
 
     do {
         fin = 0;
+        pthread_t connexion;
 
-        printf("En attente de clients\n");
+        //printf("En attente de clients\n");
+        if (pthread_create (&connexion, NULL, connexionClients, (void*) nbClients)<0) {
+            perror("Erreur à la création des threads");
+            exit(1);
+        }
+        /*connexionClients();
+        envoyerNumeroClient();*/
 
-        connexionClients(nbClients);
-        envoyerNumeroClient();
-
-        printf("Attente de la réception d'un message\n");
+        //printf("Attente de la réception d'un message\n");
 
         // Création d'un thread pour chaque client
-        pthread_t th[nbUsers];
+        
 
         for (int i = 0; i < nbUsers; i++) {
             if (pthread_create (&th[i], NULL, user, (void *) i) < 0) {
@@ -275,11 +320,22 @@ int main(int argc, char* argv[]) {
         void* ret;
 
         // On attend qu'ils soient terminés avant de relancer le serveur et l'attente de clients
-        for (int i = 0; i < nbUsers; i++) {
-            if (pthread_join(th[i], &ret) != 0){
-                perror("Erreur dans l'attente du thread");
-                exit(1);
+        int numUser = 0;
+        while(nbUsers>=0){
+            if (nbUsers !=0)
+            {   
+                if (numUser <nbUsers)
+                {
+                    if (pthread_join(th[numUser], &ret) != 0){
+                        perror("Erreur dans l'attente du thread");
+                        exit(1);
+                    }
+                    numUser++;
+                }
+                    
+
             }
+            
         }
             
     } while (1);        
