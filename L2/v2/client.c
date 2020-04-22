@@ -111,7 +111,7 @@ int envoyerMessage(int destinaire) {
     if (strcmp(message, "fin") == 0) {
     	return 0;
     }
-    printf("message envoyé\n");
+
     return nbTotalSent;
 }
 
@@ -219,14 +219,14 @@ int main(int argc, char* argv[]) {
 
 	// Saisie du pseudo
 	do {
-		if (strlen(pseudo) >= 20) {
+		if (strlen(pseudo) >= 20 ) {
 			printf("Votre pseudo est trop long (20 caractères maximum)\n");
 		}
-
+		printf("(taille max: 20, min : 1)\n" );
 		printf("Entrez votre pseudo : ");
 		gets(pseudo);
 
-	} while (strlen(pseudo) >= 20);
+	} while (strlen(pseudo) >= 20 || strlen(pseudo) < 1 );
 
 	int port = atoi(argv[1]);
 	char* ip = argv[2];

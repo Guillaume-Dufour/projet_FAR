@@ -163,8 +163,6 @@ void *user (void* arg) {
         }
 
         int expediteur = (int) arg;
-
-        printf("expediteur :%d\n",users[expediteur] );
         res = recevoirMessage(users[expediteur]);
 
         int envoye=0;//correspond au nombre de messages envoyés
@@ -179,8 +177,6 @@ void *user (void* arg) {
                         perror("Erreur dans le l'envoi du pseudo");
                     }
                     else {
-                        printf("nombre users %d\n",nbUsers );
-                        printf("envoi\n");
                         //Envoi du message
                         envoyerMessage(users[i]);
                         envoye++;
@@ -221,14 +217,13 @@ int indiceCaseLibre(){
 void *connexionClients(void* arg) {
     
     nbUsers = 0;
-    int nbClients = (int) arg;
     int dSC;
     int res;
     int position;
     while(1){
         position = indiceCaseLibre();
         
-        listen(dS, nbClients);
+        listen(dS,1);
         struct sockaddr_in aC;
         socklen_t lg = sizeof(struct sockaddr_in);
 
@@ -278,7 +273,7 @@ int main(int argc, char* argv[]) {
     }
     
     int port = atoi(argv[1]);
-    int nbClients=0;
+    int nbClients=1; // on connecte un client à la fois
 
     creerSocket(port);
     
@@ -289,7 +284,7 @@ int main(int argc, char* argv[]) {
         fin = 0;
         pthread_t connexion;
 
-        if (pthread_create (&connexion, NULL, connexionClients, (void*) nbClients)<0) {
+        if (pthread_create (&connexion, NULL, connexionClients,"1")<0) {
             perror("Erreur à la création des threads");
             exit(1);
         }
