@@ -127,11 +127,6 @@ int recevoirMessage(int expediteur) {
         }
     }
 
-    // Si "fin" est reçu
-    /*if (strcmp(message, "fin") == 0) {
-        return 0;
-    }*/
-
     return nbTotalRecv;
 }
 
@@ -172,8 +167,8 @@ void *user (void* arg) {
         printf("expediteur :%d\n",users[expediteur] );
         res = recevoirMessage(users[expediteur]);
 
-        int envoye=0;
-        int i = 0;
+        int envoye=0;//correspond au nombre de messages envoyés
+        int i = 0;//correspond à l'itération dans le tableau des utilisateurs pour le parcourir
         // Envoi du pseudo de l'expéditeur et du message à tous les autres clients
         while (envoye < nbUsers-1){
             if (i != expediteur && users[i]!=-1) {
@@ -195,9 +190,6 @@ void *user (void* arg) {
             }
             
             i++;
-            
-            
-            
         }            
         
         if (strcmp(message, "fin") == 0) {
@@ -280,13 +272,13 @@ void *connexionClients(void* arg) {
 int main(int argc, char* argv[]) {
 
     // Vérification du nombre d'arguments
-    if (argc != 3) {
-        printf("Le nombre de paramètres doit être de 2 (PORT puis nb de participants max)\n");
+    if (argc != 2) {
+        printf("Le nombre de paramètres doit être de 1 (PORT)\n");
         exit(1);
     }
     
     int port = atoi(argv[1]);
-    int nbClients = atoi(argv[2]);
+    int nbClients=0;
 
     creerSocket(port);
     
@@ -297,19 +289,12 @@ int main(int argc, char* argv[]) {
         fin = 0;
         pthread_t connexion;
 
-        //printf("En attente de clients\n");
         if (pthread_create (&connexion, NULL, connexionClients, (void*) nbClients)<0) {
             perror("Erreur à la création des threads");
             exit(1);
         }
-        /*connexionClients();
-        envoyerNumeroClient();*/
-
-        //printf("Attente de la réception d'un message\n");
 
         // Création d'un thread pour chaque client
-        
-
         for (int i = 0; i < nbUsers; i++) {
             if (pthread_create (&th[i], NULL, user, (void *) i) < 0) {
                 perror("Erreur à la création des threads");
@@ -319,22 +304,20 @@ int main(int argc, char* argv[]) {
 
         void* ret;
 
-        // On attend qu'ils soient terminés avant de relancer le serveur et l'attente de clients
+        // On attend que tous les clients soient déconnectés avant de relancer le serveur et l'attente de clients
         int numUser = 0;
         while(nbUsers>=0){
-            if (nbUsers !=0)
-            {   
-                if (numUser <nbUsers)
-                {
-                    if (pthread_join(th[numUser], &ret) != 0){
-                        perror("Erreur dans l'attente du thread");
-                        exit(1);
-                    }
-                    numUser++;
+              
+            if (numUser <nbUsers && nbUsers !=0)
+            {
+                if (pthread_join(th[numUser], &ret) != 0){
+                    perror("Erreur dans l'attente du thread");
+                    exit(1);
                 }
+                numUser++;
+            }
                     
 
-            }
             
         }
             

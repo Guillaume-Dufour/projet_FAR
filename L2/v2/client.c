@@ -132,7 +132,6 @@ int recevoirMessage(int expediteur) {
     // Réception du message par packet si le message est trop grand pour le buffer
     while (nbTotalRecv < tailleMessage) {
         res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
-
         if (res == -1) {
             perror("Erreur lors de la réception du message");
             memset(message, 0, sizeof(message));
@@ -142,22 +141,32 @@ int recevoirMessage(int expediteur) {
             nbTotalRecv += res;
         }
     }
+    if (strcmp(message, "fin") == 0) {
+    	printf("%s a quitté la conversation\n",pseudoExpediteur  );
+    }else if(strcmp(message, "begin238867") == 0){
+    	printf("%s a rejoint la conversation\n",pseudoExpediteur );
+	}else{
+	    printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
 
-    printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
-
-    // Si "fin" est reçu, le client est arrêté
-    /*if (strcmp(message, "fin") == 0) {
-    	return 0;
-    }*/
-
-    return nbTotalRecv;
+	    return nbTotalRecv;
+	}
 }
 
 // Fonction pour le thread qui envoie un message
 void *envoyer (void * arg) {   
 
     int res;
-
+    char message[15] = "begin238867";
+	int tailleMessage = strlen(message)+1;
+    //envoi du signal d'arrivée du client
+    res = send(dS, &tailleMessage, sizeof(int), 0);
+    if (res == -1) {
+		perror("Erreur lors de l'envoi de la taille du message");
+	}
+    res = send(dS, message, tailleMessage, 0);
+    if (res == -1) {
+		perror("Erreur lors de l'envoi du message");
+	}
     while(1) {
 		if (fin == 1) {
 			break;
@@ -235,6 +244,8 @@ int main(int argc, char* argv[]) {
 
 	int numeroClient = receptionNumeroClient();
 
+	
+
 	// Création des 2 threads
 	pthread_t th1, th2;
 	void *ret;
@@ -248,6 +259,7 @@ int main(int argc, char* argv[]) {
         perror("Erreur lors de la création du thread 2");
         exit(1);
     }
+
 	
 	// On attend que les deux threads soient terminés
 	if (pthread_join(th2, &ret) != 0){
