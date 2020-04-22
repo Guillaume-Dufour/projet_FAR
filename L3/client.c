@@ -97,6 +97,7 @@ int* demande_users_serveur(){
     if (res == -1) {
 		perror("Erreur lors de la réception des users");
 	}
+	printf("user 0 est : %d\n",users[0] );
 	return users;
 
 }
