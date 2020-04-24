@@ -11,7 +11,8 @@
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
 #define NB_CLIENT_MAX 100 //nb max de clients
-
+int CODE_MESSAGE = 0;
+int CODE_LISTE = 1;
 // Variables globales
 int dS; // Socket du serveur
 int users[NB_CLIENT_MAX]; // Sockets des clients (100 maximum)
@@ -126,7 +127,7 @@ int recevoirMessage(int expediteur) {
             nbTotalRecv += res;
         }
     }
-
+    printf("%s\n",message );
     return nbTotalRecv;
 }
 
@@ -163,15 +164,32 @@ void *user (void* arg) {
         }
 
         int expediteur = (int) arg;
+        printf("nb d'users %d\n",nbUsers );
         res = recevoirMessage(users[expediteur]);
 
         //Si le client demande la liste des users
         if (strcmp(message, "user342107") == 0) {
-            int res3 = send(users[expediteur], users, sizeof(users), 0);
-            printf("user 0 est : %d\n", users[0]);
-            if (res3 == -1) {
-                perror("Erreur dans le l'envoi de la liste des users");
+            int res2 = send(users[expediteur], "serveur", sizeof("serveur"), 0);
+            if (res2 == -1) {
+                perror("Erreur dans le l'envoi du pseudo");
             }
+            res2 = send(users[expediteur], &CODE_LISTE, sizeof(int), 0);
+            if (res2 == -1) {
+                perror("Erreur dans le l'envoi du code");
+            }
+
+            int res3 = send(users[expediteur], &nbUsers, sizeof(int), 0);
+            if (res3 == -1) {
+                perror("Erreur dans le l'envoi du nb de users");
+            }
+            for (int i = 0; i < nbUsers; ++i)
+            {
+                int res3 = send(users[expediteur],  &users[i], sizeof(int), 0);
+                if (res3 == -1) {
+                    perror("Erreur dans le l'envoi de la liste des users");
+                }
+            }
+            
         }else{
             int envoye=0;//correspond au nombre de messages envoyés
             int i = 0;//correspond à l'itération dans le tableau des utilisateurs pour le parcourir
@@ -183,6 +201,11 @@ void *user (void* arg) {
                         int res2 = send(users[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
                         if (res2 == -1) {
                             perror("Erreur dans le l'envoi du pseudo");
+                        }
+                        
+                        res2 = send(users[i], &CODE_MESSAGE, sizeof(int), 0);
+                        if (res2 == -1) {
+                            perror("Erreur dans le l'envoi du code");
                         }
                         else {
                             //Envoi du message

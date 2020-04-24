@@ -12,11 +12,15 @@
 #define TAILLE_MAX 1001 // Taille maximum d'un message
 #define NB_CLIENT_MAX 100 //nb max de clients
 
+int CODE_MESSAGE = 0;
+int CODE_LISTE = 1;
 // Variables globales
 char pseudo[21]; // Pseudo du client
 char pseudoExpediteur[21]; // Pseudo de l'expéditeur du message
 int dS;
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
+int users[NB_CLIENT_MAX];
+int nbUser; // nb de clients
 
 // Fonction de création de la socket et connexion à la socket
 void connexionSocket(int port, char* ip) {
@@ -72,11 +76,10 @@ int receptionNumeroClient() {
 	return numeroClient;
 }
 
-int* demande_users_serveur(){
+void demande_users_serveur(){
 
 	printf("demande de la listes des clients connectés\n");
 	char message[15]= "user342107";
-	int users[NB_CLIENT_MAX];
 	int tailleMessage = strlen(message)+1;
 	int res = send(dS, &tailleMessage, sizeof(int), 0);
 
@@ -84,7 +87,7 @@ int* demande_users_serveur(){
 		perror("Erreur lors de l'envoi de la taille du message");
 	}
     int nbTotalSent = 0;
-    // Envoi du message de demande de 
+    // Envoi du message de demande des users
     res = send(dS, message, tailleMessage, 0);
 
     if (res == -1) {
@@ -92,12 +95,21 @@ int* demande_users_serveur(){
     }
 
     printf("attente de la liste des clients\n");
-
-    res = recv(dS, users, sizeof(users), 0);
+    int nbUser=0;
+    res = recv(dS, &nbUser, sizeof(nbUser), 0);
     if (res == -1) {
-		perror("Erreur lors de la réception des users");
+		perror("Erreur lors de la réception de nbuser");
 	}
-	printf("user 0 est : %d\n",users[0] );
+	printf("il y'a %d users connecté\n",nbUser );
+    for (int i = 0; i < nbUser; ++i)
+    {
+    	res = recv(dS, &users[i], sizeof(int), 0);
+	    if (res == -1) {
+			perror("Erreur lors de la réception de nbuser");
+		}
+		printf("user %d :%d\n",i,users[i] );
+    }
+    
 	return users;
 
 }
@@ -112,7 +124,7 @@ void *envoyerFichier (void * arg) {
 	printf("%s\n",loc );
 
 	int users[NB_CLIENT_MAX];
-	*users = demande_users_serveur();
+	demande_users_serveur();
 
 	printf("%d\n", users[0]);
 	//ENVOYER AUX USERSSSSS
@@ -219,7 +231,8 @@ int recevoirMessage(int expediteur) {
 	char message[TAILLE_MAX];
 	// Réception de la taille du message permettant de savoir quand tout le message sera reçu
 	int tailleMessage;
-    int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
+	
+    int res = recv(expediteur, &tailleMessage, sizeof(int), 11);
 
     if (res == -1) {
         perror("Erreur lors de la réception de la taille du message");
@@ -229,7 +242,7 @@ int recevoirMessage(int expediteur) {
 
     // Réception du message par packet si le message est trop grand pour le buffer
     while (nbTotalRecv < tailleMessage) {
-        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
+        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 11);
         if (res == -1) {
             perror("Erreur lors de la réception du message");
             memset(message, 0, sizeof(message));
@@ -298,8 +311,17 @@ void *recevoir (void * arg) {
     	if (res == -1) {
     		perror("Erreur lors de la réception du pseudo de l'expéditeur");
     	}
-
-		res = recevoirMessage(dS);
+    	int code;
+    	res = recv(dS, &code, sizeof(code), 0);
+    	printf("CODE : %d\n",code );
+    	if (res == -1) {
+    		perror("Erreur lors de la réception du code");
+    	}
+    	if(code ==0){
+			res = recevoirMessage(dS);
+    	}else if(code == 1){
+    		demande_users_serveur();
+    	}
 
 		// On efface le pseudo de l'expéditeur
 		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
