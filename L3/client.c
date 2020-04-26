@@ -83,7 +83,6 @@ void demande_users_serveur(){
 	char message[15]= "user342107";
 	int tailleMessage = strlen(message)+1;
 	int res = send(dS, &tailleMessage, sizeof(int), 0);
-
 	if (res == -1) {
 		perror("Erreur lors de l'envoi de la taille du message");
 	}
@@ -98,6 +97,7 @@ void demande_users_serveur(){
 
 }
 
+//reçoit la listes des users présents sur le serveur (sans compter le client courant)
 void recevoir_users_serveur(){
 	printf("attente de la liste des clients\n");
     int nbUser=0;
@@ -116,6 +116,7 @@ void recevoir_users_serveur(){
 		printf("user %d :%d\n",i,users[i] );
     }
 }
+
 
 
 //thread qui va s'occuper de l'envoi d'un fichier
@@ -145,6 +146,37 @@ void *envoyerFichier (void * arg) {
 	printf("fin envoi fichier\n");
 }
 
+void debutEnvoiFile(){
+	printf("quel fichier voulez vous envoyer ?\n");
+	struct dirent *dir;
+	char fichier[200];
+	char loc[200] = "./files/";
+    // opendir() renvoie un pointeur de type DIR. 
+    //on affiche les fichiers disponibles
+    DIR *d = opendir(loc); 
+    if (d)
+    {
+        while ((dir = readdir(d)) != NULL)
+        {
+            printf("%s\n", dir->d_name);
+        }
+        closedir(d);
+    }
+    do{
+    	printf("Entrez le nom du fichier : ");
+    	gets(fichier);
+    }while(strlen(fichier)>199);
+    
+    strcat(loc, fichier);
+	pthread_t th;
+	void *ret;
+	// lancement du thread qui va envoyer le fichier
+	if (pthread_create(&th, NULL, envoyerFichier, (void *) loc) < 0) {
+        perror("Erreur lors de la création du thread envoi fichier");
+        exit(1);
+    }
+}
+
 // Fonction permettant d'envoyer un message
 int envoyerMessage(int destinaire) {
 
@@ -164,38 +196,7 @@ int envoyerMessage(int destinaire) {
 
     // Si "file" est envoyé cela signifie que l'on veut envoyer un fichier, on lance donc le thread d'envoi de fichier
     if (strcmp(message, "file") == 0) {
-
-    	printf("quel fichier voulez vous envoyer ?\n");
-    	struct dirent *dir;
-    	char fichier[200];
-    	char loc[200] = "./files/";
-	    // opendir() renvoie un pointeur de type DIR. 
-	    //on affiche les fichiers disponibles
-	    DIR *d = opendir(loc); 
-	    if (d)
-	    {
-	        while ((dir = readdir(d)) != NULL)
-	        {
-	            printf("%s\n", dir->d_name);
-	        }
-	        closedir(d);
-	    }
-	    do{
-	    	printf("Entrez le nom du fichier : ");
-	    	gets(fichier);
-	    }while(strlen(fichier)>199);
-	    
-	    strcat(loc, fichier);
-    	pthread_t th;
-		void *ret;
-		// lancement du thread qui va envoyer le fichier
-    	if (pthread_create(&th, NULL, envoyerFichier, (void *) loc) < 0) {
-	        perror("Erreur lors de la création du thread envoi fichier");
-	        exit(1);
-	    }
-
-		
-		
+    	return 2;
     }
 	// Envoi de la taille du message
 	int tailleMessage = strlen(message)+1;
@@ -288,9 +289,13 @@ void *envoyer (void * arg) {
 		}
 
 		res = envoyerMessage(dS);
+		//si on demande l'envoi d'un fichier
+		if (res == 2){
+			debutEnvoiFile();
+		}
 
 		// On stoppe le thread quand on envoie "fin" 
-		if (res == 0 || fin ==1) {
+		else if (res == 0 || fin ==1) {
 			fin = 1;
 			break;
 		}
