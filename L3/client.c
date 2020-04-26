@@ -76,6 +76,7 @@ int receptionNumeroClient() {
 	return numeroClient;
 }
 
+//demande la liste des users au serveur
 void demande_users_serveur(){
 
 	printf("demande de la listes des clients connectés\n");
@@ -93,9 +94,14 @@ void demande_users_serveur(){
     if (res == -1) {
         perror("Erreur lors de l'envoi du message");
     }
+    
 
-    printf("attente de la liste des clients\n");
+}
+
+void recevoir_users_serveur(){
+	printf("attente de la liste des clients\n");
     int nbUser=0;
+    int res;
     res = recv(dS, &nbUser, sizeof(nbUser), 0);
     if (res == -1) {
 		perror("Erreur lors de la réception de nbuser");
@@ -109,10 +115,8 @@ void demande_users_serveur(){
 		}
 		printf("user %d :%d\n",i,users[i] );
     }
-    
-	return users;
-
 }
+
 
 //thread qui va s'occuper de l'envoi d'un fichier
 
@@ -123,7 +127,6 @@ void *envoyerFichier (void * arg) {
 	char chaine[1000] = "";
 	printf("%s\n",loc );
 
-	int users[NB_CLIENT_MAX];
 	demande_users_serveur();
 
 	printf("%d\n", users[0]);
@@ -232,7 +235,7 @@ int recevoirMessage(int expediteur) {
 	// Réception de la taille du message permettant de savoir quand tout le message sera reçu
 	int tailleMessage;
 	
-    int res = recv(expediteur, &tailleMessage, sizeof(int), 11);
+    int res = recv(expediteur, &tailleMessage, sizeof(int), 0);
 
     if (res == -1) {
         perror("Erreur lors de la réception de la taille du message");
@@ -242,7 +245,7 @@ int recevoirMessage(int expediteur) {
 
     // Réception du message par packet si le message est trop grand pour le buffer
     while (nbTotalRecv < tailleMessage) {
-        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 11);
+        res = recv(expediteur, message+nbTotalRecv, tailleMessage, 0);
         if (res == -1) {
             perror("Erreur lors de la réception du message");
             memset(message, 0, sizeof(message));
@@ -320,7 +323,7 @@ void *recevoir (void * arg) {
     	if(code ==0){
 			res = recevoirMessage(dS);
     	}else if(code == 1){
-    		demande_users_serveur();
+    		recevoir_users_serveur();
     	}
 
 		// On efface le pseudo de l'expéditeur

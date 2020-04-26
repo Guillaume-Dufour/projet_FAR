@@ -77,6 +77,7 @@ int envoyerMessage(int destinaire) {
 
     // Envoi de la taille du message
     int tailleMessage = strlen(message)+1;
+    printf("taille message :%d\n",tailleMessage );
     int res = send(destinaire, &tailleMessage, sizeof(int), 0);
 
     if (res == -1) {
@@ -94,6 +95,7 @@ int envoyerMessage(int destinaire) {
             perror("Erreur lors de l'envoi du message");
         }
         else {
+            printf("envoye: %s\n",message );
             nbTotalSent += res;
             printf("%d octets ont été envoyés\n", res);
         }            
@@ -127,7 +129,7 @@ int recevoirMessage(int expediteur) {
             nbTotalRecv += res;
         }
     }
-    printf("%s\n",message );
+    
     return nbTotalRecv;
 }
 
@@ -165,6 +167,7 @@ void *user (void* arg) {
 
         int expediteur = (int) arg;
         printf("nb d'users %d\n",nbUsers );
+        int nb_envoi_file = nbUsers-1;
         res = recevoirMessage(users[expediteur]);
 
         //Si le client demande la liste des users
@@ -178,16 +181,19 @@ void *user (void* arg) {
                 perror("Erreur dans le l'envoi du code");
             }
 
-            int res3 = send(users[expediteur], &nbUsers, sizeof(int), 0);
+            int res3 = send(users[expediteur], &nb_envoi_file, sizeof(int), 0);
             if (res3 == -1) {
                 perror("Erreur dans le l'envoi du nb de users");
             }
             for (int i = 0; i < nbUsers; ++i)
             {
-                int res3 = send(users[expediteur],  &users[i], sizeof(int), 0);
-                if (res3 == -1) {
-                    perror("Erreur dans le l'envoi de la liste des users");
+                if (i != expediteur){
+                    int res3 = send(users[expediteur],  &users[i], sizeof(int), 0);
+                    if (res3 == -1) {
+                        perror("Erreur dans le l'envoi de la liste des users");
+                    }
                 }
+                
             }
             
         }else{
