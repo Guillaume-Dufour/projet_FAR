@@ -12,22 +12,21 @@
 #define TAILLE_MAX 1001 // Taille maximum d'un message
 #define NB_CLIENT_MAX 100 //nb max de clients
 
-int CODE_MESSAGE = 0;
-int CODE_LISTE = 1;
 // Variables globales
 char pseudo[21]; // Pseudo du client
 char pseudoExpediteur[21]; // Pseudo de l'expéditeur du message
-int dS;
+int dS; // Socket pour envoyer des messages
+int dS1; // Socket pour échanger des informations avec le serveur
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
 int users[NB_CLIENT_MAX];
 int nbUser; // nb de clients
 
 // Fonction de création de la socket et connexion à la socket
-void connexionSocket(int port, char* ip) {
+int connexionSocket(int port, char* ip) {
 
-	dS = socket(PF_INET, SOCK_STREAM, 0);
+	int idSocket = socket(PF_INET, SOCK_STREAM, 0);
 
-	if (dS == -1) {
+	if (idSocket == -1) {
 		perror("Erreur dans la création de la socket");
 		exit(1);
 	}
@@ -47,14 +46,16 @@ void connexionSocket(int port, char* ip) {
 	}
 
 	socklen_t lgA = sizeof(aS);
-	res = connect(dS, (struct sockaddr *) &aS, lgA);
+	res = connect(idSocket, (struct sockaddr *) &aS, lgA);
 
 	if (res == -1) {
 		perror("Erreur à la demande de connexion");
 		exit(0);
 	}
 	else {
-		printf("Connexion réussie\n");
+		printf("Connexion réussie à la socket %d\n", idSocket);
+
+		return idSocket;
 	}
 }
 
@@ -77,47 +78,38 @@ int receptionNumeroClient() {
 }
 
 //demande la liste des users au serveur
-void demande_users_serveur(){
+void demandeUsersServeur(){
 
-	printf("demande de la listes des clients connectés\n");
+	printf("Demande de la liste des clients connectés\n");
+
 	char message[15]= "user342107";
-	int tailleMessage = strlen(message)+1;
-	int res = send(dS, &tailleMessage, sizeof(int), 0);
-	if (res == -1) {
-		perror("Erreur lors de l'envoi de la taille du message");
-	}
-    int nbTotalSent = 0;
+
     // Envoi du message de demande des users
-    res = send(dS, message, tailleMessage, 0);
+    int res = send(dS1, message, strlen(message)+1, 0);
 
     if (res == -1) {
         perror("Erreur lors de l'envoi du message");
     }
-    
 
-}
+    int nbUser;
 
-//reçoit la listes des users présents sur le serveur (sans compter le client courant)
-void recevoir_users_serveur(){
-	printf("attente de la liste des clients\n");
-    int nbUser=0;
-    int res;
-    res = recv(dS, &nbUser, sizeof(nbUser), 0);
+    res = recv(dS1, &nbUser, sizeof(nbUser), 0);
+
     if (res == -1) {
 		perror("Erreur lors de la réception de nbuser");
 	}
+
 	printf("il y'a %d users connecté\n",nbUser );
-    for (int i = 0; i < nbUser; ++i)
-    {
-    	res = recv(dS, &users[i], sizeof(int), 0);
+
+    for (int i = 0; i < nbUser; i++) {
+    	res = recv(dS1, &users[i], sizeof(int), 0);
 	    if (res == -1) {
 			perror("Erreur lors de la réception de nbuser");
 		}
 		printf("user %d :%d\n",i,users[i] );
     }
+
 }
-
-
 
 //thread qui va s'occuper de l'envoi d'un fichier
 
@@ -127,8 +119,6 @@ void *envoyerFichier (void * arg) {
 	file = fopen(loc, "r");
 	char chaine[1000] = "";
 	printf("%s\n",loc );
-
-	demande_users_serveur();
 
 	printf("%d\n", users[0]);
 	//ENVOYER AUX USERSSSSS
@@ -146,8 +136,12 @@ void *envoyerFichier (void * arg) {
 	printf("fin envoi fichier\n");
 }
 
+void *recevoirFichier (void * arg) { 
+	
+}
+
 void debutEnvoiFile(){
-	printf("quel fichier voulez vous envoyer ?\n");
+	printf("Quel fichier voulez vous envoyer ?\n");
 	struct dirent *dir;
 	char fichier[200];
 	char loc[200] = "./files/";
@@ -165,7 +159,9 @@ void debutEnvoiFile(){
     do{
     	printf("Entrez le nom du fichier : ");
     	gets(fichier);
-    }while(strlen(fichier)>199);
+    } while(strlen(fichier)>199);
+
+    demandeUsersServeur();
     
     strcat(loc, fichier);
 	pthread_t th;
@@ -178,7 +174,7 @@ void debutEnvoiFile(){
 }
 
 // Fonction permettant d'envoyer un message
-int envoyerMessage(int destinaire) {
+int sendMessage(int destinaire) {
 
 	char message[TAILLE_MAX];
     int res;
@@ -196,7 +192,7 @@ int envoyerMessage(int destinaire) {
 
     // Si "file" est envoyé cela signifie que l'on veut envoyer un fichier, on lance donc le thread d'envoi de fichier
     if (strcmp(message, "file") == 0) {
-    	return 2;
+    	return -2;
     }
 	// Envoi de la taille du message
 	int tailleMessage = strlen(message)+1;
@@ -230,7 +226,7 @@ int envoyerMessage(int destinaire) {
 }
 
 // Fonction permettant de recevoir un message
-int recevoirMessage(int expediteur) {
+int getMessage(int expediteur) {
 
 	char message[TAILLE_MAX];
 	// Réception de la taille du message permettant de savoir quand tout le message sera reçu
@@ -269,7 +265,7 @@ int recevoirMessage(int expediteur) {
 }
 
 // Fonction pour le thread qui envoie un message
-void *envoyer (void * arg) {   
+void *envoyerMessage (void * arg) {   
 
     int res;
     char message[15] = "begin238867";
@@ -288,9 +284,9 @@ void *envoyer (void * arg) {
 			break;
 		}
 
-		res = envoyerMessage(dS);
+		res = sendMessage(dS);
 		//si on demande l'envoi d'un fichier
-		if (res == 2){
+		if (res == -2){
 			debutEnvoiFile();
 		}
 
@@ -305,7 +301,7 @@ void *envoyer (void * arg) {
 }
 
 //Fonction pour le thread qui reçoit un message
-void *recevoir (void * arg) {
+void *recevoirMessage (void * arg) {
 
     int res;
 
@@ -319,17 +315,8 @@ void *recevoir (void * arg) {
     	if (res == -1) {
     		perror("Erreur lors de la réception du pseudo de l'expéditeur");
     	}
-    	int code;
-    	res = recv(dS, &code, sizeof(code), 0);
-    	printf("CODE : %d\n",code );
-    	if (res == -1) {
-    		perror("Erreur lors de la réception du code");
-    	}
-    	if(code ==0){
-			res = recevoirMessage(dS);
-    	}else if(code == 1){
-    		recevoir_users_serveur();
-    	}
+
+    	getMessage(dS);
 
 		// On efface le pseudo de l'expéditeur
 		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
@@ -360,7 +347,8 @@ int main(int argc, char* argv[]) {
 	int port = atoi(argv[1]);
 	char* ip = argv[2];
 
-	connexionSocket(port, ip);
+	dS = connexionSocket(port, ip);
+	dS1 = connexionSocket(32565, ip);
 
 	int res;
 
@@ -379,16 +367,20 @@ int main(int argc, char* argv[]) {
 	pthread_t th1, th2;
 	void *ret;
 
-	if (pthread_create(&th1, NULL, recevoir, "1") < 0) {
+	if (pthread_create(&th1, NULL, recevoirMessage, "1") < 0) {
         perror("Erreur lors de la création du thread 1");
         exit(1);
     }
     
-    if (pthread_create(&th2, NULL, envoyer, "2") < 0) {
+    if (pthread_create(&th2, NULL, envoyerMessage, "2") < 0) {
         perror("Erreur lors de la création du thread 2");
         exit(1);
     }
 
+    if (pthread_create(&th1, NULL, recevoirFichier, "3") < 0) {
+        perror("Erreur lors de la création du thread 3");
+        exit(1);
+    }
 	
 	// On attend que les deux threads soient terminés
 	if (pthread_join(th2, &ret) != 0){
