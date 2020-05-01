@@ -222,35 +222,52 @@ void* userFichier(void* arg) {
     while (1) {
 
         int expediteur = (int) arg;
-
-        char buffer[BUFSIZ];
         int tailleFichier;
-        int total = 0;
-        ssize_t taille;
+        int nbOctetsEnvoye = 0;
+        
 
-        int res = recv(usersFichier[expediteur], &tailleFichier, BUFSIZ, 0);
+        
 
-        if (res == -1) {
+        int res = recv(usersFichier[expediteur], &tailleFichier, sizeof(int), 0);
+
+         if (res == -1) {
             perror("Erreur lors de la réception de la taille du fichier");
         }
+        printf("la taille recue est :%d\n",tailleFichier );
 
-        //tailleFichier = atoi(buffer);
-
-        printf("Taille reçue : %d\n", tailleFichier);
-
-        total = tailleFichier;
-
-        while ((total > 0) && ((taille = recv(usersFichier[expediteur], buffer, BUFSIZ, 0)) > 0)) {
-
-            int envoye = 0;
-            int i = 0;
-
+        char buffer[200];
+        int envoye = 0;
+        int i = 0;
+        while (envoye < nbUsers-1){
+            if (i != expediteur && usersFichier[i]!=-1) {
+                res = send(usersFichier[i], pseudos[expediteur], sizeof(pseudos[expediteur]), 0);
+                 if (res == -1) {
+                    perror("Erreur lors de la réception du pseudo");
+                }
+                res = send(usersFichier[i], &tailleFichier, sizeof(int), 0);
+                printf("envoi de taille\n");
+                if (res == -1) {
+                    perror("Erreur lors de l'envoi du fichier");
+                }
+                envoye++;
+            }
+                
+            i++;
+        }
+        printf("envoi en cours...\n");
+        envoye=0;
+        i=0;
+        while(nbOctetsEnvoye<tailleFichier){
             while (envoye < nbUsers-1){
                 if (i != expediteur && usersFichier[i]!=-1) {
-                    printf("Contenu : %s\n", buffer);
+                    res = recv(usersFichier[expediteur], buffer, sizeof(buffer), 0);
+
+                    if(res<0){
+                        perror("Erreur lors de la reception du fichier");
+                    }
                     //Envoi du fichier
                     res = send(usersFichier[i], buffer, sizeof(buffer), 0);
-
+                    sleep(0.5);
                     if (res == -1) {
                         perror("Erreur lors de l'envoi du fichier");
                     }
@@ -260,12 +277,16 @@ void* userFichier(void* arg) {
                 
                 i++;
             }
-
-            total -= taille;
+            envoye=0;
+            i=0;
+            memset(buffer,0,sizeof(buffer));
+            nbOctetsEnvoye=nbOctetsEnvoye+res;
         }
+        
     }
-
     pthread_exit(0);
+
+    
 }
 
 int indiceCaseLibre(){

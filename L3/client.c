@@ -11,6 +11,14 @@
 #include <fcntl.h>
 #include <sys/sendfile.h>
 #include <netinet/in.h>
+#include <pthread.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <string.h>
+#include <signal.h>
+
 
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
@@ -86,102 +94,96 @@ void sendFile(int destinaire, char* loc) {
 
 	FILE* file = NULL;
 	file = fopen(loc, "r");
+	int fsize = open(loc,O_RDONLY);
 	char chaine[1000] = "";
 	printf("%s\n",loc );
 
-	int fd = open(loc, O_RDONLY);
-	struct stat fileStat;
-
-	if (fd == -1) {
-		perror("Erreur lors du open");
-		pthread_exit(0);
-	}
-
-	if (fstat(fd, &fileStat) < 0) {
-		perror("Erreur lors du fstat");
-		pthread_exit(0);
-	}
-
-	printf("Taille du fichier : %ld\n", fileStat.st_size);
-
-	int res = send(destinaire, &fileStat.st_size, sizeof(fileStat.st_size), 0);
-
-	if (res == -1) {
-		perror("Erreur lors de l'envoi de la taille du fichier");
-		pthread_exit(0);
-	}
-
-	int offset = 0;
-	int total = fileStat.st_size;
-	int sendBytes = sendfile(destinaire, fd, &offset, 100);
-
-	if (sendBytes < 0) {
-		perror("Erreur envoi");
-	}
-	else {
-		printf("Nb bytes envoyés : %d\n", sendBytes);
-	}
-
-	/*while (((sendBytes = sendfile(destinaire, fd, &offset, BUFSIZ)) > 0) && (total > 0)) {
-		printf("Nombre de caractères envoyés : %d\n", sendBytes);
-		total -= sendBytes;
-	}*/
-
-	/*if (file != NULL)
-    {
-        while (fgets(chaine, 1000, file) != NULL) // On lit le fichier tant qu'on ne reçoit pas d'erreur (NULL)
-        {
- 
-    		printf("%s", chaine); // On affiche la chaîne qu'on vient de lire
-    		for (int i = 0; i < nbUser; i++) {
-
-    			int tailleMessage =strlen(chaine);
-    			send(users[i], &tailleMessage, sizeof(int), 0);
-    			send(users[i], chaine, sizeof(chaine), 0);
-    		}
+	struct stat file_stat;
+    if(fstat(fsize,&file_stat)<0){
+    	perror("erreur obtention des stats");
+    	exit(1);
+    }
+	int taille = file_stat.st_size;
+	
+    printf("la taille est : %d \n",taille);
+    int part =send(dS2,&taille,sizeof(int),0);
+    if(part==0||part==-1){
+        perror("Erreur envoi taille");
+        exit(1);
+    }
+    int envoye=0;
+	char buff[200];
+    while(envoye<taille){
+        int part = fread(buff,1,200,file);
+        part = send(dS2,buff,sizeof(buff),0);
+        if(part<0){
+            perror("Erreur");
+            exit(1);
         }
-         fclose(file);
-    }*/
-	//printf("fin envoi fichier\n");
+        if (part < 200){
+            if (feof(file)){
+                printf("fin de fichier\n");
+                break;
+            }
+            if (ferror(file)){
+                printf("Erreur lors de la lecture du fichier\n");
+                break;
+            }
+            
+        }
+        memset(buff,0,sizeof(buff));
+        envoye=envoye+part;
+    }
+    printf("fichier envoyé\n");
+    fclose(file);
+    pthread_exit(0);
+
 }
 
 void getFile(int expediteur) {
-
-	char buffer[BUFSIZ];
-	int tailleFichier;
 	FILE *fichierRecu;
-	int total = 0;
-	ssize_t taille;
-
-	int res = recv(expediteur, buffer, BUFSIZ, 0);
-
-	if (res == -1) {
-		perror("Erreur lors de la réception de la taille du fichier");
-	}
-
-	tailleFichier = atoi(buffer);
-
-
-	printf("Taille reçue : %d\n", tailleFichier);
-
-	fichierRecu = fopen("test.txt", "w");
-
+	fichierRecu = fopen("loutre.jpg", "a+");
 	if (fichierRecu == NULL) {
 		perror("Erreur lors de la création du fichier");
+		exit(1);
 	}
+	int taille;
+    int res=recv(dS2,&taille,sizeof(int),0);
+    if(res<0){
+    	perror("erreur lors de la reception de la taille");
+    	exit(1);
+    }
+    printf("la taille à recevoir est : %d\n",taille );
+    int recu=0;
+    char part[200];
+    int byte=0;
+    while(recu<taille)
+    {
+        byte=recv(dS2,part,sizeof(part),0);
+        if(byte<0){
+            perror("Erreur de reception");
+            exit(1);
+        }
+        recu=recu+byte;
+        fwrite(part, 1, 200, fichierRecu);
 
-	total = tailleFichier;
-
-	while ((total > 0) && ((taille = recv(expediteur, buffer, BUFSIZ, 0)) > 0)) {
-		res = fwrite(buffer, sizeof(char), taille, fichierRecu);
-
-		if (res == -1) {
-			perror("Erreurs lors du fwrite");
-		}
-		total -= taille;
-	}
-
-	fclose(fichierRecu);
+        if (byte < 200){
+            if (feof(fichierRecu)){
+                printf("Fin de fichier\n");
+                break;
+                
+            }
+            if (ferror(fichierRecu)){
+                printf("Erreur de lecture\n");
+                break;
+                
+            }
+            
+        }
+        memset(part,0,sizeof(part));
+    }
+    printf("fichier recu\n");
+    fclose(fichierRecu);
 }
 
 void *envoyerFichier(void * arg) {
@@ -237,11 +239,8 @@ int sendMessage(int destinaire) {
     	if (strlen(message) >= 1000) {
     		printf("Votre message est trop long (1000 caractères maximum)\n");
     	}
-
 		gets(message);
-
     } while (strlen(message) >= 1000);
-
 
     // Si "file" est envoyé cela signifie que l'on veut envoyer un fichier, on lance donc le thread d'envoi de fichier
     if (strcmp(message, "file") == 0) {
@@ -335,6 +334,7 @@ void *recevoirFichier(void * arg) {
     	}
 
     	getFile(dS2);
+    	printf("fichier recu de %s\n",pseudoExpediteur);
 
 		// On efface le pseudo de l'expéditeur
 		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
