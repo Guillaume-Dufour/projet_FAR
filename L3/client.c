@@ -7,6 +7,10 @@
 #include <string.h>
 #include <dirent.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <netinet/in.h>
 
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
@@ -16,9 +20,8 @@
 char pseudo[21]; // Pseudo du client
 char pseudoExpediteur[21]; // Pseudo de l'expéditeur du message
 int dS; // Socket pour envoyer des messages
-int dS1; // Socket pour échanger des informations avec le serveur
+int dS2;
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
-int users[NB_CLIENT_MAX];
 int nbUser; // nb de clients
 
 // Fonction de création de la socket et connexion à la socket
@@ -77,91 +80,141 @@ int receptionNumeroClient() {
 	return numeroClient;
 }
 
-//demande la liste des users au serveur
-void demandeUsersServeur(){
-
-	printf("Demande de la liste des clients connectés\n");
-
-	char message[15]= "user342107";
-
-    // Envoi du message de demande des users
-    int res = send(dS1, message, strlen(message)+1, 0);
-
-    if (res == -1) {
-        perror("Erreur lors de l'envoi du message");
-    }
-
-    int nbUser;
-
-    res = recv(dS1, &nbUser, sizeof(nbUser), 0);
-
-    if (res == -1) {
-		perror("Erreur lors de la réception de nbuser");
-	}
-
-	printf("il y'a %d users connecté\n",nbUser );
-
-    for (int i = 0; i < nbUser; i++) {
-    	res = recv(dS1, &users[i], sizeof(int), 0);
-	    if (res == -1) {
-			perror("Erreur lors de la réception de nbuser");
-		}
-		printf("user %d :%d\n",i,users[i] );
-    }
-
-}
-
 //thread qui va s'occuper de l'envoi d'un fichier
 
-void *envoyerFichier (void * arg) { 
-	char *loc = (char*) arg;
+void sendFile(int destinaire, char* loc) {
+
 	FILE* file = NULL;
 	file = fopen(loc, "r");
 	char chaine[1000] = "";
 	printf("%s\n",loc );
 
-	printf("%d\n", users[0]);
-	//ENVOYER AUX USERSSSSS
+	int fd = open(loc, O_RDONLY);
+	struct stat fileStat;
 
-	
-	if (file != NULL)
+	if (fd == -1) {
+		perror("Erreur lors du open");
+		pthread_exit(0);
+	}
+
+	if (fstat(fd, &fileStat) < 0) {
+		perror("Erreur lors du fstat");
+		pthread_exit(0);
+	}
+
+	printf("Taille du fichier : %ld\n", fileStat.st_size);
+
+	int res = send(destinaire, &fileStat.st_size, sizeof(fileStat.st_size), 0);
+
+	if (res == -1) {
+		perror("Erreur lors de l'envoi de la taille du fichier");
+		pthread_exit(0);
+	}
+
+	int offset = 0;
+	int total = fileStat.st_size;
+	int sendBytes = sendfile(destinaire, fd, &offset, 100);
+
+	if (sendBytes < 0) {
+		perror("Erreur envoi");
+	}
+	else {
+		printf("Nb bytes envoyés : %d\n", sendBytes);
+	}
+
+	/*while (((sendBytes = sendfile(destinaire, fd, &offset, BUFSIZ)) > 0) && (total > 0)) {
+		printf("Nombre de caractères envoyés : %d\n", sendBytes);
+		total -= sendBytes;
+	}*/
+
+	/*if (file != NULL)
     {
         while (fgets(chaine, 1000, file) != NULL) // On lit le fichier tant qu'on ne reçoit pas d'erreur (NULL)
         {
  
     		printf("%s", chaine); // On affiche la chaîne qu'on vient de lire
+    		for (int i = 0; i < nbUser; i++) {
+
+    			int tailleMessage =strlen(chaine);
+    			send(users[i], &tailleMessage, sizeof(int), 0);
+    			send(users[i], chaine, sizeof(chaine), 0);
+    		}
         }
          fclose(file);
-    }
-	printf("fin envoi fichier\n");
+    }*/
+	//printf("fin envoi fichier\n");
 }
 
-void *recevoirFichier (void * arg) { 
-	
+void getFile(int expediteur) {
+
+	char buffer[BUFSIZ];
+	int tailleFichier;
+	FILE *fichierRecu;
+	int total = 0;
+	ssize_t taille;
+
+	int res = recv(expediteur, buffer, BUFSIZ, 0);
+
+	if (res == -1) {
+		perror("Erreur lors de la réception de la taille du fichier");
+	}
+
+	tailleFichier = atoi(buffer);
+
+
+	printf("Taille reçue : %d\n", tailleFichier);
+
+	fichierRecu = fopen("test.txt", "w");
+
+	if (fichierRecu == NULL) {
+		perror("Erreur lors de la création du fichier");
+	}
+
+	total = tailleFichier;
+
+	while ((total > 0) && ((taille = recv(expediteur, buffer, BUFSIZ, 0)) > 0)) {
+		res = fwrite(buffer, sizeof(char), taille, fichierRecu);
+
+		if (res == -1) {
+			perror("Erreurs lors du fwrite");
+		}
+		total -= taille;
+	}
+
+	fclose(fichierRecu);
+}
+
+void *envoyerFichier(void * arg) {
+
+	char* loc = (char*) arg;
+	sendFile(dS2, loc);
+	pthread_exit(0);
 }
 
 void debutEnvoiFile(){
-	printf("Quel fichier voulez vous envoyer ?\n");
+	printf("Quel fichier voulez-vous envoyer ?\n");
 	struct dirent *dir;
 	char fichier[200];
 	char loc[200] = "./files/";
     // opendir() renvoie un pointeur de type DIR. 
     //on affiche les fichiers disponibles
     DIR *d = opendir(loc); 
-    if (d)
-    {
-        while ((dir = readdir(d)) != NULL)
-        {
-            printf("%s\n", dir->d_name);
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+        	if (dir->d_name[0] != '.') {
+            	printf("%s\n", dir->d_name);
+        	}
         }
+
         closedir(d);
     }
-    do{
+
+    do {
     	printf("Entrez le nom du fichier : ");
     	gets(fichier);
     } while(strlen(fichier)>199);
 
-    demandeUsersServeur();
+    //demandeUsersServeur();
     
     strcat(loc, fichier);
 	pthread_t th;
@@ -251,18 +304,47 @@ int getMessage(int expediteur) {
         else {
             nbTotalRecv += res;
         }
-    }
+    } 
+
     if (strcmp(message, "fin") == 0) {
     	printf("%s a quitté la conversation\n",pseudoExpediteur  );
-    }else if(strcmp(message, "begin238867") == 0){
+    	nbUser--;
+    }
+    else if(strcmp(message, "begin238867") == 0){
     	printf("%s a rejoint la conversation\n",pseudoExpediteur );
     	memset(message, 0, sizeof(message));
-	}else{
+    	nbUser++;
+	} 
+	else{
 	    printf("Message reçu de %s : %s\n", pseudoExpediteur, message);
 
 	    return nbTotalRecv;
 	}
 }
+
+void *recevoirFichier(void * arg) {
+
+	int res;
+
+    while(1){
+
+    	res = recv(dS2, &pseudoExpediteur, sizeof(pseudoExpediteur), 0);
+
+    	if (res == -1) {
+    		perror("Erreur lors de la réception du pseudo de l'expéditeur");
+    	}
+
+    	getFile(dS2);
+
+		// On efface le pseudo de l'expéditeur
+		memset(pseudoExpediteur, 0, sizeof(pseudoExpediteur));
+	}
+	
+	pthread_exit(0);
+
+}
+
+
 
 // Fonction pour le thread qui envoie un message
 void *envoyerMessage (void * arg) {   
@@ -348,7 +430,7 @@ int main(int argc, char* argv[]) {
 	char* ip = argv[2];
 
 	dS = connexionSocket(port, ip);
-	dS1 = connexionSocket(32565, ip);
+	dS2 = connexionSocket(32566, ip);
 
 	int res;
 
@@ -364,7 +446,7 @@ int main(int argc, char* argv[]) {
 	
 
 	// Création des 2 threads
-	pthread_t th1, th2;
+	pthread_t th1, th2, th3;
 	void *ret;
 
 	if (pthread_create(&th1, NULL, recevoirMessage, "1") < 0) {
@@ -377,7 +459,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    if (pthread_create(&th1, NULL, recevoirFichier, "3") < 0) {
+    if (pthread_create(&th3, NULL, recevoirFichier, "3") < 0) {
         perror("Erreur lors de la création du thread 3");
         exit(1);
     }

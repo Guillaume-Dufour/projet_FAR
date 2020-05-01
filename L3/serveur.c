@@ -8,21 +8,26 @@
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <netinet/in.h>
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
 #define NB_CLIENT_MAX 100 //nb max de clients
 
 // Variables globales
 int dS; // Socket du serveur pour l'échange des messages
-int dS1; // Socket du serveur pour l'échange d'informations avec les clients
+int dS2;
 int users[NB_CLIENT_MAX]; // Sockets des clients (100 maximum)
-int usersInfos[NB_CLIENT_MAX];
+int usersFichier[NB_CLIENT_MAX];
 char pseudos[NB_CLIENT_MAX][21]; // Pseudos des clients
 int nbUsers; // Nombre de clients
 int tailleMessage; // Taille du message à envoyer
 char message[TAILLE_MAX];
 int fin = 0; // Variable qui va servir à arrêter les threads
-pthread_t th[NB_CLIENT_MAX];//tableau de threads pour chaque client
+pthread_t th[NB_CLIENT_MAX];//tableau de threads pour chaque client (message)
+pthread_t th2[NB_CLIENT_MAX];//tableau de threads pour chaque client (fichier)
+
 
 // Fonction de création de la socket
 int creerSocket(int port) {
@@ -161,7 +166,7 @@ void fini() {
 }
 
 // Fonction qui reçoit le message de l'expéditeur et qui l'envoie au autres clients
-void *user (void* arg) {
+void *userMessage (void* arg) {
     int res;
     while (1) {
         if (fin == 1) {
@@ -196,6 +201,7 @@ void *user (void* arg) {
             
         if (strcmp(message, "fin") == 0) {
             users[expediteur]=-1;
+            usersFichier[expediteur]=-1;
             // On efface le pseudo du client précédent (utile dans le cas où une conversation est relancée)
             memset(pseudos[expediteur], 0, sizeof(pseudos[expediteur]));
             nbUsers--;
@@ -209,6 +215,59 @@ void *user (void* arg) {
 
     pthread_exit(0);
 }
+
+void* userFichier(void* arg) {
+    int res;
+
+    while (1) {
+
+        int expediteur = (int) arg;
+
+        char buffer[BUFSIZ];
+        int tailleFichier;
+        int total = 0;
+        ssize_t taille;
+
+        int res = recv(usersFichier[expediteur], &tailleFichier, BUFSIZ, 0);
+
+        if (res == -1) {
+            perror("Erreur lors de la réception de la taille du fichier");
+        }
+
+        //tailleFichier = atoi(buffer);
+
+        printf("Taille reçue : %d\n", tailleFichier);
+
+        total = tailleFichier;
+
+        while ((total > 0) && ((taille = recv(usersFichier[expediteur], buffer, BUFSIZ, 0)) > 0)) {
+
+            int envoye = 0;
+            int i = 0;
+
+            while (envoye < nbUsers-1){
+                if (i != expediteur && usersFichier[i]!=-1) {
+                    printf("Contenu : %s\n", buffer);
+                    //Envoi du fichier
+                    res = send(usersFichier[i], buffer, sizeof(buffer), 0);
+
+                    if (res == -1) {
+                        perror("Erreur lors de l'envoi du fichier");
+                    }
+
+                    envoye++;
+                }
+                
+                i++;
+            }
+
+            total -= taille;
+        }
+    }
+
+    pthread_exit(0);
+}
+
 int indiceCaseLibre(){
     for (int i = 0; i < nbUsers; i++) {
         if(users[i] == -1){
@@ -219,76 +278,37 @@ int indiceCaseLibre(){
     return nbUsers;
 }
 
-void *recevoirDemandeUsers(void* arg) {
-
-    while (1) {
-        printf("Traitement de la demande de users\n");
-        char message[15];
-        int expediteur = (int) arg;
-
-        int res = recv(usersInfos[expediteur], message, sizeof(message), 0);
-
-        if (res == -1) {
-            perror("Erreur lors de la réception du message");
-        }
-
-        if (strcmp(message, "user342107") == 0) {
-            printf("nb d'users %d\n",nbUsers );
-            int nb_envoi_file = nbUsers-1;
-            int res3 = send(usersInfos[expediteur], &nb_envoi_file, sizeof(int), 0);
-
-            if (res3 == -1) {
-                perror("Erreur dans le l'envoi du nb de users");
-            }
-
-            for (int i = 0; i < nbUsers; i++) {
-                if (i != expediteur){
-                    int res3 = send(usersInfos[expediteur],  &users[i], sizeof(int), 0);
-                    if (res3 == -1) {
-                        perror("Erreur dans le l'envoi de la liste des users");
-                    }
-                }
-                
-            }        
-        }
-    }
-    
-}
 
 // Fonction permettant que les clients se connectent
 void *connexionClients(void* arg) {
     
     nbUsers = 0;
     int dSC;
-    int dSC1;
+    int dSC2;
     int res;
     int position;
     pthread_t infos[NB_CLIENT_MAX];
 
     while(1){
-        printf("aaaaa\n");
         position = indiceCaseLibre();
         
         listen(dS,1);
         struct sockaddr_in aC;
         socklen_t lg = sizeof(struct sockaddr_in);
 
-        printf("bbbbbbb\n");
         dSC = accept(dS, (struct sockaddr*) &aC, &lg);
 
-        listen(dS1, 1);
-        printf("ccccc\n");
-        dSC1 = accept(dS1, (struct sockaddr*) &aC, &lg);
+        listen(dS2, 1);
+        dSC2 = accept(dS2, (struct sockaddr*) &aC, &lg);
 
-
-        if (dSC == -1 || dSC1 == -1) { 
+        if (dSC == -1 || dSC2 == -1) { 
             perror("L'utilisateur n'a pas été accepté");
         }
         else {
             position = indiceCaseLibre();
             // On met la socket du client dans le tableau
             users[position] = dSC;
-            usersInfos[position] = dSC1;
+            usersFichier[position] = dSC2;
 
             // Réception du pseudo du client
             res = recv(users[position], pseudos[position], 20, 0);
@@ -301,12 +321,11 @@ void *connexionClients(void* arg) {
                 if (res == -1) {
                     perror("Erreur lors de l'envoi du numéro de client");
                 }
-                if (pthread_create (&th[position], NULL, user, (void *) position) < 0) {
-                    perror("Erreur à la création des threads");
+                if (pthread_create (&th[position], NULL, userMessage, (void *) position) < 0) {
+                    perror("Erreur à la création des threads pour l'envoi de messsages");
                 }
-                if (pthread_create (&infos[position], NULL, recevoirDemandeUsers, (void *) position) < 0) {
-                    perror("Erreur à la création des threads recevoirDemandeUsers");
-                    exit(1);
+                if (pthread_create (&th2[position], NULL, userFichier, (void *) position) < 0) {
+                    perror("Erreur à la création des threads pour l'envoi de fichiers");
                 }
                 nbUsers++;
                 printf("L'utilisateur n°%d (%s) a été accepté\n", position, pseudos[position]);
@@ -328,13 +347,12 @@ int main(int argc, char* argv[]) {
     }
     
     int port = atoi(argv[1]);
-    int nbClients=1; // on connecte un client à la fois
 
     // Création de la socket pour l'échange de messages
     dS = creerSocket(port);
 
-    // Création de la socket pour la demande d'informations au serveur
-    dS1 = creerSocket(32565);
+    // Création de la socket pour l'envoi et la réception de fichier
+    dS2 = creerSocket(32566);
 
     
     // Signal pour le Ctrl+C
