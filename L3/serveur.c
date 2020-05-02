@@ -224,11 +224,12 @@ void* userFichier(void* arg) {
         int expediteur = (int) arg;
         int tailleFichier;
         int nbOctetsEnvoye = 0;
-        
-
-        
 
         int res = recv(usersFichier[expediteur], &tailleFichier, sizeof(int), 0);
+        if (res == 0){//si un utilisateur est parti res renverra 0 car l'expéditeur n'existe plus donc on termine le thread
+
+            break;
+        }
 
          if (res == -1) {
             perror("Erreur lors de la réception de la taille du fichier");
