@@ -224,8 +224,11 @@ void* userFichier(void* arg) {
         int expediteur = (int) arg;
         int tailleFichier;
         int nbOctetsEnvoye = 0;
+        char name[200];
 
-        int res = recv(usersFichier[expediteur], &tailleFichier, sizeof(int), 0);
+        int res = recv(usersFichier[expediteur], name, sizeof(name), 0);
+
+        res = recv(usersFichier[expediteur], &tailleFichier, sizeof(int), 0);
         if (res == 0){//si un utilisateur est parti res renverra 0 car l'expéditeur n'existe plus donc on termine le thread
 
             break;
@@ -245,6 +248,14 @@ void* userFichier(void* arg) {
                  if (res == -1) {
                     perror("Erreur lors de la réception du pseudo");
                 }
+
+                res =send(usersFichier[i],name,sizeof(name),0);
+                if(res == -1){
+                    perror("erreur lors de l'envoi du nom du fichier");
+                    exit(1);
+                }
+
+
                 res = send(usersFichier[i], &tailleFichier, sizeof(int), 0);
                 printf("envoi de taille\n");
                 if (res == -1) {
@@ -258,14 +269,16 @@ void* userFichier(void* arg) {
         printf("envoi en cours...\n");
         envoye=0;
         i=0;
+        tailleFichier = tailleFichier;
         while(nbOctetsEnvoye<tailleFichier){
+            res = recv(usersFichier[expediteur], buffer, sizeof(buffer), 0);
+
+            if(res<0){
+                perror("Erreur lors de la reception du fichier");
+            }
             while (envoye < nbUsers-1){
                 if (i != expediteur && usersFichier[i]!=-1) {
-                    res = recv(usersFichier[expediteur], buffer, sizeof(buffer), 0);
-
-                    if(res<0){
-                        perror("Erreur lors de la reception du fichier");
-                    }
+                    
                     //Envoi du fichier
                     res = send(usersFichier[i], buffer, sizeof(buffer), 0);
                     sleep(0.5);
@@ -283,6 +296,7 @@ void* userFichier(void* arg) {
             memset(buffer,0,sizeof(buffer));
             nbOctetsEnvoye=nbOctetsEnvoye+res;
         }
+        memset(name,0,sizeof(name));
         
     }
     pthread_exit(0);

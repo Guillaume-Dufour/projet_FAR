@@ -31,6 +31,7 @@ int dS; // Socket pour envoyer des messages
 int dS2;
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
 int nbUser; // nb de clients
+int numeroClient;
 
 // Fonction de création de la socket et connexion à la socket
 int connexionSocket(int port, char* ip) {
@@ -90,13 +91,22 @@ int receptionNumeroClient() {
 
 //thread qui va s'occuper de l'envoi d'un fichier
 
-void sendFile(int destinaire, char* loc) {
+void sendFile(int destinaire, char* name) {
 
+	char loc[200] = "./files/";
+	strcat(loc, name);
 	FILE* file = NULL;
 	file = fopen(loc, "r");
 	int fsize = open(loc,O_RDONLY);
 	char chaine[1000] = "";
+	
 	printf("%s\n",loc );
+
+	int res =send(dS2,name,strlen(name),0);
+	if(res == -1){
+		perror("erreur lors de l'envoi du nom du fichier");
+		exit(1);
+	}
 
 	struct stat file_stat;
     if(fstat(fsize,&file_stat)<0){
@@ -141,15 +151,32 @@ void sendFile(int destinaire, char* loc) {
 }
 
 void getFile(int expediteur) {
+	char name[200];
+	char loc[200]="./target/";
 	FILE *fichierRecu;
-	fichierRecu = fopen("loutre.jpg", "a+");
+	int res=recv(dS2,name,sizeof(name),0);
+    if(res==-1){
+    	perror("erreur lors de la reception de la taille");
+    	exit(1);
+    }
+    
+	char newfile[200];
+	strcpy(newfile,pseudo);
+	strcat(newfile,"_");
+
+	strcat(newfile,name);
+	strcat(loc,newfile);
+	
+	fichierRecu = fopen(loc, "w+");
 	if (fichierRecu == NULL) {
 		perror("Erreur lors de la création du fichier");
 		exit(1);
 	}
 	int taille;
-    int res=recv(dS2,&taille,sizeof(int),0);
-    if(res<0){
+
+
+    res=recv(dS2,&taille,sizeof(int),0);
+    if(res==-1){
     	perror("erreur lors de la reception de la taille");
     	exit(1);
     }
@@ -182,14 +209,15 @@ void getFile(int expediteur) {
         }
         memset(part,0,sizeof(part));
     }
+
     printf("fichier recu\n");
     fclose(fichierRecu);
 }
 
 void *envoyerFichier(void * arg) {
-
-	char* loc = (char*) arg;
-	sendFile(dS2, loc);
+	char* name = (char*) arg;
+	printf("%s\n",name );
+	sendFile(dS2, name);
 	pthread_exit(0);
 }
 
@@ -198,6 +226,7 @@ void debutEnvoiFile(){
 	struct dirent *dir;
 	char fichier[200];
 	char loc[200] = "./files/";
+	
     // opendir() renvoie un pointeur de type DIR. 
     //on affiche les fichiers disponibles
     DIR *d = opendir(loc); 
@@ -218,11 +247,11 @@ void debutEnvoiFile(){
 
     //demandeUsersServeur();
     
-    strcat(loc, fichier);
+    
 	pthread_t th;
 	void *ret;
 	// lancement du thread qui va envoyer le fichier
-	if (pthread_create(&th, NULL, envoyerFichier, (void *) loc) < 0) {
+	if (pthread_create(&th, NULL, envoyerFichier, (void *) fichier) < 0) {
         perror("Erreur lors de la création du thread envoi fichier");
         exit(1);
     }
@@ -441,7 +470,7 @@ int main(int argc, char* argv[]) {
 		perror("Erreur lors de l'envoi du pseudo");
 	}
 
-	int numeroClient = receptionNumeroClient();
+	numeroClient = receptionNumeroClient();
 
 	
 
