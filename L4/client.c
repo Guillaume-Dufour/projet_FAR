@@ -27,6 +27,7 @@ struct {
 } infos;
 
 // Variables globales
+char* ip;
 int fin = 0; // Variable pour savoir si le client doit s'arrêter
 int nbUsers; // Nombre de clients
 
@@ -407,38 +408,69 @@ void * recevoirMessage (void * arg) {
 void choixAction(int expediteur) {
 
     int choix = 0;
+    int nbSalons;
 
-    /*char listeSalons[1000];
+    int res = recv(expediteur, &nbSalons, sizeof(int), 0);
 
-    int res = recv(expediteur, listeSalons, sizeof(listeSalons), 0);*/
-
-    char* listeSalons = recvTCP(expediteur, 1000);
-
-    /*if (res == -1) {
-        perror("Erreur lors de la réception de la liste des salons");
+    if (res == -1) {
+        perror("Erreur lors de la réception du nombre de salons disponibles");
         exit(1);
     }
     else {
-        printf("Nb recv : %d\n", res);
-    }*/
+    }
+
+    char* listeSalons = recvTCP(expediteur, 1000);
 
     printf("Que voulez-vous faire ?\n");
     printf("\tCréer un salon (tapez 1)\n");
     printf("\tRejoindre un salon (tapez 2)\n");
 
-
-
     do {
         printf("Choix : ");
-        char* input = saisie(5);
-        choix = atoi(input);
+        choix = saisieInt();
     } while (choix != 1 && choix != 2);
 
     if (choix == 1) {
         printf("Création\n");
     }
     else {
-        printf("Liste des salons :\n\n%s\n", listeSalons);
+        printf("\nListe des salons (%d) :\n\n%s\n", nbSalons, listeSalons);
+
+        do {
+            printf("Numéro du salon à rejoindre : ");
+            choix = saisieInt();
+        } while(choix <= 0 || choix > nbSalons);
+
+        printf("Vous allez rejoindre le salon numéro %d\n", choix);
+
+        res = send(expediteur, &choix, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du numéro de salon à rejoindre");
+            exit(1);
+        }
+
+        int port;
+
+        res = recv(expediteur, &port, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de la réception du numéro de port (socket fichier)");
+            exit(1);
+        }
+
+        infos.dS = connexionSocket(port, ip);
+
+        res = recv(expediteur, &port, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de la réception du numéro de port (socket fichier)");
+            exit(1);
+        }
+
+        infos.dS2 = connexionSocket(port, ip);
+
+        printf("CA MARCHE ON EST TROP FORTS !!!!!!\n");
     }
 }
 
@@ -488,7 +520,7 @@ int main(int argc, char* argv[]) {
     } while (strlen(infos.pseudo) >= 20 || strlen(infos.pseudo) < 1);
 
     int port = atoi(argv[1]);
-    char* ip = argv[2];
+    ip = argv[2];
 
     infos.dS = connexionSocket(port, ip);
 

@@ -2,6 +2,7 @@
 #define PROJETFAR_UTILS_H
 
 char* saisie(int);
+int saisieInt();
 int sendTCP(int, char*);
 char* recvTCP(int, int);
 int contientFichier(char*, char*);

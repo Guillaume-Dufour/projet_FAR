@@ -27,7 +27,16 @@ struct salon {
     int dS2; // Descripteur de socket des fichiers du salon (serveur)
     int dSMessage[NB_CLIENT_MAX]; // Descripteur de socket des messages du salon (clients)
     int dSFichier[NB_CLIENT_MAX]; // Descripteur de socket des fichiers du salon (clients)
+    int nbUsers; // Nombre de clients dans le salon
 };
+
+/**
+ * Permet de stocker la position globale du client ainsi que son descripteur de socket à passer dans le thread
+ */
+typedef struct {
+    int position;
+    int dS;
+} Informations;
 
 
 struct {
@@ -121,24 +130,31 @@ void * userMessage (void *arg) {
         }
 
         int expediteur = (int) arg;
+
+        int numSalon = infos.usersSalons[expediteur];
+        struct salon salon = infos.listeSalons[numSalon];
+
+
         char* message = recvTCP(users.dSMessage[expediteur], TAILLE_MAX);
 
         int envoye = 0; // Correspond au nombre de messages envoyés
         int i = 0;// Correspond à l'itération dans le tableau des utilisateurs pour le parcourir
 
+        printf("Nombre de users dans le salon : %d\n", salon.nbUsers);
+
         // Envoi du pseudo de l'expéditeur et du message à tous les autres clients
-        while (envoye < nbUsers-1){
-            if (i != expediteur && users.dSMessage[i] != -1) {
+        while (envoye < salon.nbUsers-1){
+            if (salon.dSMessage[i] != -1 && salon.dSMessage[i] != users.dSMessage[expediteur]) {
 
                 //Envoi du pseudo de l'expéditeur
-                int res = send(users.dSMessage[i], users.pseudos[expediteur], sizeof(users.pseudos[expediteur]), 0);
+                int res = send(salon.dSMessage[i], users.pseudos[expediteur], sizeof(users.pseudos[expediteur]), 0);
 
                 if (res == -1) {
-                    perror("Erreur dans le l'envoi du pseudo");
+                    perror("Erreur lors de l'envoi du pseudo");
                 }
                 else {
                     //Envoi du message
-                    sendTCP(users.dSMessage[i], message);
+                    sendTCP(salon.dSMessage[i], message);
                     envoye++;
                 }
             }
@@ -257,9 +273,9 @@ void* userFichier(void* arg) {
 }
 
 
-int indiceCaseLibre(){
+int indiceCaseLibre(int tab[]){
     for (int i = 0; i < nbUsers; i++) {
-        if (users.dSMessage[i] == -1) {
+        if (tab[i] == -1) {
             return i;
         }
     }
@@ -267,36 +283,145 @@ int indiceCaseLibre(){
     return nbUsers;
 }
 
-/*int indiceCaseLibreSalon() {
+int indiceCaseLibreSalon() {
     for (int i = 0; i < nbSalons; i++) {
-        if (infos.listeSalons[i] == NULL) {
+        if (infos.listeSalons[i].numeroSalon == -1) {
             return i;
         }
     }
 
     return nbSalons;
-}*/
+}
+
+
+int rechercherSalon(int numSalonClient) {
+
+    int i = 0;
+    int j = 0;
+
+    while (j < numSalonClient) {
+        if (infos.listeSalons[i].numeroSalon != -1) {
+            j++;
+        }
+
+        i++;
+    }
+
+    return i;
+}
 
 
 void * userLancement(void * arg) {
 
-    int destinataire = (int) arg;
+    Informations* destinataire = (Informations*) arg;
+
+    struct sockaddr_in aC;
+    socklen_t lg = sizeof(struct sockaddr_in);
 
     char liste[1000] = "";
 
     struct salon courant;
 
-    for (int i = 0; i < nbSalons; i++) {
-        char str[10];
-        sprintf(str, "%d", i);
-        strcat(liste, str);
-        strcat(liste, ". ");
-        courant = infos.listeSalons[i];
-        strcat(liste, courant.description);
-        strcat(liste, "\n");
+    int i = 0;
+    int nbSalonsEnvoyes = 0;
+
+    while (nbSalonsEnvoyes < nbSalons) {
+        if (infos.listeSalons[i].numeroSalon != -1) {
+            char str[10];
+            sprintf(str, "%d", nbSalonsEnvoyes+1);
+            strcat(liste, str);
+            strcat(liste, ". ");
+            courant = infos.listeSalons[i];
+            strcat(liste, courant.description);
+            strcat(liste, "\n");
+            nbSalonsEnvoyes++;
+        }
+
+        i++;
     }
 
-    sendTCP(destinataire, liste);
+    i = 0;
+    nbSalonsEnvoyes = 0;
+
+    int res = send(destinataire->dS, &nbSalons, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de l'envoi du nombre de salons disponibles");
+        exit(1);
+    }
+
+    sendTCP(destinataire->dS, liste);
+
+    int choix;
+
+    res = recv(destinataire->dS, &choix, sizeof(int), 0);
+
+    if (choix == 0) {
+        /*
+         * Création
+         */
+    }
+    else {
+        // Rejoindre un salon
+
+        int port = PORT+indicePort;
+
+        res = send(destinataire->dS, &port, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du numéro de port (socket message)");
+            exit(1);
+        }
+
+        int dSMessage = creerSocket(port);
+        indicePort++;
+
+        port = PORT+indicePort;
+
+        res = send(destinataire->dS, &port, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du numéro de port (socket fichier)");
+            exit(1);
+        }
+
+
+        int dSFichier = creerSocket(PORT+indicePort);
+        indicePort++;
+
+        listen(dSMessage, 1);
+
+        int dSCMessage = accept(dSMessage, (struct sockaddr*) &aC, &lg);
+
+        listen(dSFichier, 1);
+
+        int dSCFichier = accept(dSFichier, (struct sockaddr*) &aC, &lg);
+
+        if (dSCMessage == -1 || dSCFichier == -1) {
+            perror("Erreur lors de la connexion aux sockets");
+            exit(1);
+        }
+        else {
+            int numSalon = rechercherSalon(choix);
+            int position = indiceCaseLibre(infos.listeSalons[numSalon].dSMessage);
+
+            infos.listeSalons[numSalon].dSMessage[position] = dSCMessage;
+            infos.listeSalons[numSalon].dSFichier[position] = dSCFichier;
+            infos.listeSalons[numSalon].nbUsers++;
+
+            users.dSMessage[destinataire->position] = dSCMessage;
+            users.dSFichier[destinataire->position] = dSCFichier;
+
+            infos.usersSalons[destinataire->position] = numSalon;
+        }
+    }
+
+    if (pthread_create (&th[destinataire->position], NULL, userMessage, (void *) destinataire->position) > 0) {
+        perror("Erreur à la création des threads pour l'envoi de messsages");
+    }
+    if (pthread_create (&th2[destinataire->position], NULL, userFichier, (void *) destinataire->position) > 0) {
+        perror("Erreur à la création des threads pour l'envoi de fichiers");
+    }
 
     pthread_exit(0);
 }
@@ -310,12 +435,13 @@ int creerSalon(char* description) {
     int dSFichier = creerSocket(PORT+indicePort);
     indicePort++;
 
-    int indice = 0;
+    int indice = indiceCaseLibreSalon();
 
     struct salon salonCourant;
     salonCourant.numeroSalon = indice;
     salonCourant.dS1 = dSMessage;
     salonCourant.dS2 = dSFichier;
+    salonCourant.nbUsers = 0;
     strcpy(salonCourant.description, description);
 
     infos.listeSalons[indice] = salonCourant;
@@ -337,7 +463,6 @@ void * connexionClients() {
 
 
     while(1){
-        position = indiceCaseLibre();
 
         struct sockaddr_in aC;
         socklen_t lg = sizeof(struct sockaddr_in);
@@ -349,7 +474,7 @@ void * connexionClients() {
             perror("L'utilisateur n'a pas été accepté");
         }
         else {
-            position = indiceCaseLibre();
+            position = indiceCaseLibre(users.dSMessage);
 
             // Réception du pseudo du client
             res = recv(dSC, users.pseudos[position], 20, 0);
@@ -364,7 +489,12 @@ void * connexionClients() {
                     perror("Erreur lors de l'envoi du numéro de client");
                 }
 
-                if (pthread_create(&thChoix, NULL, userLancement, (void *) dSC) > 0) {
+                Informations* informations = malloc(sizeof(int)*2);
+
+                informations->position = position;
+                informations->dS = dSC;
+
+                if (pthread_create(&thChoix, NULL, userLancement, (void *) informations) > 0) {
                     perror("Erreur à la création du thread pour lancer un user");
                 }
 

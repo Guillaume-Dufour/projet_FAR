@@ -17,6 +17,18 @@ char* saisie(int maxInput) {
     return input;
 }
 
+int saisieInt() {
+
+    int input;
+
+    if (scanf("%d", &input) != 1) {
+        perror("Erreur lors de la saisie de l'entier");
+        exit(1);
+    }
+
+    return input;
+}
+
 int sendTCP(int destinataire, char* message) {
 
     int tailleMessage = (int) strlen(message)+1;
