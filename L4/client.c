@@ -19,7 +19,8 @@
 
 // Informations sur le client
 struct {
-    int dS; // Socket pour l'échange de messages
+    int dS;
+    int dS1; // Socket pour l'échange de messages
     int dS2; // Socket pour l'échange de fichiers
     int numeroClient; // Numéro du client dans le serveur
     char* pseudo; // Pseudo du client
@@ -65,7 +66,7 @@ int connexionSocket(int port, char* ip) {
         exit(1);
     }
     else {
-        printf("Connexion réussie à la socket %d\n", idSocket);
+        //printf("Connexion réussie à la socket %d\n", idSocket);
 
         return idSocket;
     }
@@ -256,6 +257,13 @@ void getFile(int expediteur) {
 // Thread pour l'envoi de fichier
 void * envoyerFichier(void * arg) {
     char* name = (char*) arg;
+
+    int res = send(infos.dS2, &infos.numeroClient, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de l'envoi du numéro de client");
+    }
+
     sendFile(infos.dS2, name);
     pthread_exit(0);
 }
@@ -325,7 +333,14 @@ void * envoyerMessage (void * arg) {
 
     int res;
 
-    sendTCP(infos.dS, "begin238867");
+    res = send(infos.dS1, &infos.numeroClient, sizeof(int), 0);
+
+    sendTCP(infos.dS1, "begin238867");
+
+
+    if (res == -1) {
+        perror("Erreur lors de l'envoi du numéro de client");
+    }
 
     while(1) {
 
@@ -349,7 +364,14 @@ void * envoyerMessage (void * arg) {
             debutEnvoiFile();
         }
         else {
-            sendTCP(infos.dS, message);
+
+            res = send(infos.dS1, &infos.numeroClient, sizeof(int), 0);
+
+            if (res == -1) {
+                perror("Erreur lors de l'envoi du numéro de client");
+            }
+
+            sendTCP(infos.dS1, message);
         }
 
         // On stoppe le thread quand on envoie "fin"
@@ -376,14 +398,14 @@ void * recevoirMessage (void * arg) {
             break;
         }
 
-        res = recv(infos.dS, infos.pseudoExpediteur, sizeof(infos.pseudoExpediteur), 0);
+        res = recv(infos.dS1, infos.pseudoExpediteur, sizeof(infos.pseudoExpediteur), 0);
 
         if (res == -1) {
             perror("Erreur lors de la réception du pseudo de l'expéditeur");
             exit(1);
         }
 
-        char* message = recvTCP(infos.dS, TAILLE_MAX);
+        char* message = recvTCP(infos.dS1, TAILLE_MAX);
 
         if (strcmp(message, "fin") == 0) {
             printf("%s a quitté la conversation\n", infos.pseudoExpediteur);
@@ -430,8 +452,35 @@ void choixAction(int expediteur) {
         choix = saisieInt();
     } while (choix != 1 && choix != 2);
 
+    char* nomSalon;
+
     if (choix == 1) {
-        printf("Création\n");
+
+        do {
+            printf("\n(Taille max: 50, min : 1)\n" );
+            printf("Entrez le nom du salon : ");
+            nomSalon = saisie(50);
+
+            if (strlen(nomSalon) >= 50) {
+                printf("Le nom du salon que vous avez entré est trop long (50 caractères maximum)\n");
+            }
+        } while (strlen(nomSalon) >= 50 || strlen(nomSalon) < 1);
+
+        choix = 0;
+
+        res = send(expediteur, &choix, sizeof(int), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du choix");
+            exit(1);
+        }
+
+        res = send(expediteur, nomSalon, strlen(nomSalon), 0);
+
+        if (res == -1) {
+            perror("Erreur lors de l'envoi du nom du salon");
+            exit(1);
+        }
     }
     else {
         printf("\nListe des salons (%d) :\n\n%s\n", nbSalons, listeSalons);
@@ -439,7 +488,7 @@ void choixAction(int expediteur) {
         do {
             printf("Numéro du salon à rejoindre : ");
             choix = saisieInt();
-        } while(choix <= 0 || choix > nbSalons);
+        } while (choix <= 0 || choix > nbSalons);
 
         printf("Vous allez rejoindre le salon numéro %d\n", choix);
 
@@ -449,29 +498,27 @@ void choixAction(int expediteur) {
             perror("Erreur lors de l'envoi du numéro de salon à rejoindre");
             exit(1);
         }
-
-        int port;
-
-        res = recv(expediteur, &port, sizeof(int), 0);
-
-        if (res == -1) {
-            perror("Erreur lors de la réception du numéro de port (socket fichier)");
-            exit(1);
-        }
-
-        infos.dS = connexionSocket(port, ip);
-
-        res = recv(expediteur, &port, sizeof(int), 0);
-
-        if (res == -1) {
-            perror("Erreur lors de la réception du numéro de port (socket fichier)");
-            exit(1);
-        }
-
-        infos.dS2 = connexionSocket(port, ip);
-
-        printf("CA MARCHE ON EST TROP FORTS !!!!!!\n");
     }
+
+    int port;
+
+    res = recv(expediteur, &port, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de la réception du numéro de port (socket fichier)");
+        exit(1);
+    }
+
+    infos.dS1 = connexionSocket(port, ip);
+
+    res = recv(expediteur, &port, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de la réception du numéro de port (socket fichier)");
+        exit(1);
+    }
+
+    infos.dS2 = connexionSocket(port, ip);
 }
 
 
@@ -524,7 +571,6 @@ int main(int argc, char* argv[]) {
 
     infos.dS = connexionSocket(port, ip);
 
-
     signal(SIGINT, fini);
 
     int res;
@@ -537,9 +583,9 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    infos.numeroClient = receptionNumeroClient(infos.dS);
-
     choixAction(infos.dS);
+
+    infos.numeroClient = receptionNumeroClient(infos.dS);
 
     // Création des 2 threads
     pthread_t th1, th2, th3;
@@ -561,7 +607,7 @@ int main(int argc, char* argv[]) {
     }
 
     // On attend que les deux threads soient terminés
-    if (pthread_join(th2, &ret) != 0){
+    if (pthread_join(th2, &ret) != 0) {
         perror("Erreur dans l'attente du thread");
         exit(1);
     }

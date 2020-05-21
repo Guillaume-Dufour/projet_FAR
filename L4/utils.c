@@ -17,17 +17,20 @@ char* saisie(int maxInput) {
     return input;
 }
 
+
 int saisieInt() {
 
-    int input;
+    char* input = malloc(100*sizeof(int));
 
-    if (scanf("%d", &input) != 1) {
-        perror("Erreur lors de la saisie de l'entier");
-        exit(1);
+    if (fgets(input, 100, stdin) == NULL) {
+        perror("Erreur lors de la saisie du nombre");
     }
 
-    return input;
+    input[strlen(input)-1] = '\0';
+
+    return atoi(input);
 }
+
 
 int sendTCP(int destinataire, char* message) {
 
