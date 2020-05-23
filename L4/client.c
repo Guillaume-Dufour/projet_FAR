@@ -359,6 +359,19 @@ void * envoyerMessage (void * arg) {
             }
         } while (strlen(message) >= 1000);
 
+        if (fin == 1) {
+
+            res = send(infos.dS1, &infos.numeroClient, sizeof(int), 0);
+
+            if (res == -1) {
+                perror("Erreur lors de l'envoi du numéro de client");
+            }
+
+            sendTCP(infos.dS1, "fin");
+
+            break;
+        }
+
         // Si "file" est envoyé cela signifie que l'on veut envoyer un fichier, on lance donc le thread d'envoi de fichier
         if (strcmp(message, "file") == 0){
             debutEnvoiFile();
@@ -375,7 +388,7 @@ void * envoyerMessage (void * arg) {
         }
 
         // On stoppe le thread quand on envoie "fin"
-        if (strcmp(message, "fin") == 0 || fin == 1) {
+        if (strcmp(message, "fin") == 0 || strcmp(message, "/suppSalon") == 0 || fin == 1) {
             fin = 1;
             break;
         }
@@ -409,11 +422,13 @@ void * recevoirMessage (void * arg) {
 
         if (strcmp(message, "fin") == 0) {
             printf("%s a quitté la conversation\n", infos.pseudoExpediteur);
-            nbUsers--;
         }
         else if(strcmp(message, "begin238867") == 0) {
             printf("%s a rejoint la conversation\n", infos.pseudoExpediteur);
-            nbUsers++;
+        }
+        else if (strcmp(message, "fin1523265") == 0) {
+            printf("Le salon a été supprimé par %s\n", infos.pseudoExpediteur);
+            fin = 1;
         }
         else {
             printf("Message reçu de %s : %s\n", infos.pseudoExpediteur, message);

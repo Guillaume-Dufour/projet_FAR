@@ -94,6 +94,57 @@ int creerSocket(int port) {
 }
 
 
+void terminerSalon(int indiceSalon) {
+
+    printf("Indice des salons : %d\n", indiceSalon);
+
+    infos.listeSalons[indiceSalon].numeroSalon = -1;
+    memset(infos.listeSalons[indiceSalon].description, 0, sizeof(infos.listeSalons[indiceSalon].description));
+    infos.listeSalons[indiceSalon].nbUsers = 0;
+    infos.listeSalons[indiceSalon].portMessage = -1;
+    infos.listeSalons[indiceSalon].portFichier = -1;
+    nbSalons--;
+
+    int res;
+
+    res = close(infos.listeSalons[indiceSalon].dS1);
+
+    if (res == -1) {
+        perror("Erreur lors du close socket message du salon");
+    }
+
+    res = close(infos.listeSalons[indiceSalon].dS2);
+
+    if (res == -1) {
+        perror("Erreur lors du close socket fichier du salon");
+    }
+
+    /*int closed = 0;
+    int i = 0;
+
+    while (closed < infos.listeSalons[indiceSalon].nbUsers){
+        if (infos.listeSalons[indiceSalon].dSMessage[i] != -1) {
+
+            res = close(infos.listeSalons[indiceSalon].dSMessage[i]);
+
+            if (res == -1) {
+                perror("Erreur lors du close socket fichier du salon");
+            }
+
+            res = close(infos.listeSalons[indiceSalon].dSFichier[i]);
+
+            if (res == -1) {
+                perror("Erreur lors du close socket fichier du salon");
+            }
+
+            closed++;
+        }
+
+        i++;
+    }*/
+}
+
+
 // Fermeture des sockets si on fait Ctrl+C
 void fini() {
 
@@ -147,6 +198,34 @@ void * userMessage (void *arg) {
 
         char* message = recvTCP(users.dSMessage[expediteur], TAILLE_MAX);
 
+        if (strcmp(message, "/suppSalon") == 0) {
+            message = "fin1523265";
+        }
+
+        if (strlen(message) > 11 && message[0] == '/') {
+
+            char sub[12];
+            memcpy(sub, &message[0], 11);
+            sub[11] = '\0';
+
+            if (strcmp(sub, "/changeName") == 0) {
+
+                char nouvelleDescription[51];
+                memcpy(nouvelleDescription, &message[12], 50);
+                nouvelleDescription[strlen(nouvelleDescription)] = '\0';
+
+                if (strlen(nouvelleDescription) > 0 && nouvelleDescription[0] != ' ') {
+                    strcpy(infos.listeSalons[numSalon].description,nouvelleDescription);
+
+                    continue;
+                }
+
+                memset(nouvelleDescription, 0, sizeof(nouvelleDescription));
+            }
+
+            memset(sub, 0, sizeof(sub));
+        }
+
 
         int envoye = 0; // Correspond au nombre de messages envoyés
         int i = 0; // Correspond à l'itération dans le tableau des utilisateurs pour le parcourir
@@ -171,12 +250,36 @@ void * userMessage (void *arg) {
             i++;
         }
 
+        if (strcmp(message, "fin1523265") == 0) {
+            terminerSalon(numSalon);
+            break;
+        }
+
         if (strcmp(message, "fin") == 0) {
-            infos.listeSalons[numSalon].dSMessage[expediteur] = -1;
-            infos.listeSalons[numSalon].dSFichier[expediteur] = -1;
+
+            int res = close(infos.listeSalons[numSalon].dSMessage[positionUser]);
+
+            if (res == -1) {
+                perror("Erreur lors du close socket message client");
+            }
+
+            res = close(infos.listeSalons[numSalon].dSFichier[positionUser]);
+
+            if (res == -1) {
+                perror("Erreur lors du close socket fichier client");
+            }
+
+            infos.listeSalons[numSalon].dSMessage[positionUser] = -1;
+            infos.listeSalons[numSalon].dSFichier[positionUser] = -1;
+            users.dSMessage[expediteur] = -1;
+            users.dSFichier[expediteur] = -1;
+            infos.usersSalons[expediteur] = -1;
             // On efface le pseudo du client précédent (utile dans le cas où une conversation est relancée)
             memset(users.pseudos[expediteur], 0, sizeof(users.pseudos[expediteur]));
+
+            printf("nbUsers avant fin : %d\n", infos.listeSalons[numSalon].nbUsers);
             infos.listeSalons[numSalon].nbUsers--;
+            printf("nbUsers après fin : %d\n", infos.listeSalons[numSalon].nbUsers);
             nbUsers--;
 
             break;
@@ -212,7 +315,6 @@ void* userFichier(void* arg) {
         res = recv(users.dSFichier[expediteur], name, sizeof(name), 0);
 
         if (res == -1) {
-            perror("Erreur lors de la réception du nom de fichier");
             pthread_exit(0);
         }
 
@@ -337,6 +439,8 @@ int creerSalon(char* description) {
 
     int indice = indiceCaseLibreSalon();
 
+    printf("Indice lors de la création : %d\n", indice);
+
     struct salon salonCourant;
     salonCourant.numeroSalon = indice;
     salonCourant.dS1 = dSMessage;
@@ -356,16 +460,22 @@ int creerSalon(char* description) {
 
 int rechercherSalon(int numSalonClient) {
 
+    for (int k = 0; k < 10; k++) {
+        printf("Numéro de salon %d : %d\n", k, infos.listeSalons[k].numeroSalon);
+    }
+
     int i = 0;
     int j = 1;
 
-    while (j < numSalonClient) {
+    while (j < numSalonClient || infos.listeSalons[i].numeroSalon == -1) {
         if (infos.listeSalons[i].numeroSalon != -1) {
             j++;
         }
 
         i++;
     }
+
+    printf("Résultat recherche salon : %d\n", i);
 
     return i;
 }
@@ -424,6 +534,7 @@ void * userLancement(void * arg) {
         exit(1);
     }
 
+    // Création d'un salon
     if (choix == 0) {
 
         char nomSalon[50];
@@ -443,7 +554,12 @@ void * userLancement(void * arg) {
 
     // Rejoindre un salon
 
+
+    printf("Choix : %d\n", choix);
+
     int numSalon = rechercherSalon(choix);
+
+    printf("Numéro de salon : %d\n", numSalon);
 
     int position = indiceCaseLibre(infos.listeSalons[numSalon].dSMessage, infos.listeSalons[numSalon].nbUsers);
 
@@ -598,6 +714,7 @@ int main(int argc, char* argv[]) {
                     perror("Erreur dans l'attente du thread");
                     exit(1);
                 }
+                
                 numUser++;
             }
         }
