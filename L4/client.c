@@ -562,8 +562,6 @@ void fini() {
 
 int main(int argc, char* argv[]) {
 
-    //infos.pseudo = malloc(20);
-
     // Vérification du nombre d'arguments
     if (argc != 3) {
         printf("Erreur dans le nombre de paramètres\nLe premier paramètre est le numéro de PORT et le second paramètre est l'adresse IP du serveur");

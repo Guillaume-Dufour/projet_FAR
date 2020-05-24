@@ -96,8 +96,6 @@ int creerSocket(int port) {
 
 void terminerSalon(int indiceSalon) {
 
-    printf("Indice des salons : %d\n", indiceSalon);
-
     infos.listeSalons[indiceSalon].numeroSalon = -1;
     memset(infos.listeSalons[indiceSalon].description, 0, sizeof(infos.listeSalons[indiceSalon].description));
     infos.listeSalons[indiceSalon].nbUsers = 0;
@@ -119,29 +117,7 @@ void terminerSalon(int indiceSalon) {
         perror("Erreur lors du close socket fichier du salon");
     }
 
-    /*int closed = 0;
-    int i = 0;
-
-    while (closed < infos.listeSalons[indiceSalon].nbUsers){
-        if (infos.listeSalons[indiceSalon].dSMessage[i] != -1) {
-
-            res = close(infos.listeSalons[indiceSalon].dSMessage[i]);
-
-            if (res == -1) {
-                perror("Erreur lors du close socket fichier du salon");
-            }
-
-            res = close(infos.listeSalons[indiceSalon].dSFichier[i]);
-
-            if (res == -1) {
-                perror("Erreur lors du close socket fichier du salon");
-            }
-
-            closed++;
-        }
-
-        i++;
-    }*/
+    printf("Salon %d supprimé\n", indiceSalon);
 }
 
 
@@ -276,10 +252,7 @@ void * userMessage (void *arg) {
             infos.usersSalons[expediteur] = -1;
             // On efface le pseudo du client précédent (utile dans le cas où une conversation est relancée)
             memset(users.pseudos[expediteur], 0, sizeof(users.pseudos[expediteur]));
-
-            printf("nbUsers avant fin : %d\n", infos.listeSalons[numSalon].nbUsers);
             infos.listeSalons[numSalon].nbUsers--;
-            printf("nbUsers après fin : %d\n", infos.listeSalons[numSalon].nbUsers);
             nbUsers--;
 
             break;
@@ -439,8 +412,6 @@ int creerSalon(char* description) {
 
     int indice = indiceCaseLibreSalon();
 
-    printf("Indice lors de la création : %d\n", indice);
-
     struct salon salonCourant;
     salonCourant.numeroSalon = indice;
     salonCourant.dS1 = dSMessage;
@@ -460,10 +431,6 @@ int creerSalon(char* description) {
 
 int rechercherSalon(int numSalonClient) {
 
-    for (int k = 0; k < 10; k++) {
-        printf("Numéro de salon %d : %d\n", k, infos.listeSalons[k].numeroSalon);
-    }
-
     int i = 0;
     int j = 1;
 
@@ -474,8 +441,6 @@ int rechercherSalon(int numSalonClient) {
 
         i++;
     }
-
-    printf("Résultat recherche salon : %d\n", i);
 
     return i;
 }
@@ -554,12 +519,7 @@ void * userLancement(void * arg) {
 
     // Rejoindre un salon
 
-
-    printf("Choix : %d\n", choix);
-
     int numSalon = rechercherSalon(choix);
-
-    printf("Numéro de salon : %d\n", numSalon);
 
     int position = indiceCaseLibre(infos.listeSalons[numSalon].dSMessage, infos.listeSalons[numSalon].nbUsers);
 
@@ -650,12 +610,6 @@ void * connexionClients() {
                 perror("Erreur lors de la réception du pseudo");
             }
             else {
-                /*res = send(dSC, &position, sizeof(int), 0);
-
-                if (res == -1) {
-                    perror("Erreur lors de l'envoi du numéro de client");
-                }*/
-
                 Informations* informations = malloc(sizeof(int)*2);
 
                 informations->position = position;
@@ -681,8 +635,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    creerSalon("Loutre de Léo");
-    creerSalon("GROSSE MOULA");
+    creerSalon("Salon par défault");
 
     int port = atoi(argv[1]);
 
