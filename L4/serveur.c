@@ -518,7 +518,6 @@ void * userLancement(void * arg) {
     }
 
     // Rejoindre un salon
-
     int numSalon = rechercherSalon(choix);
 
     int position = indiceCaseLibre(infos.listeSalons[numSalon].dSMessage, infos.listeSalons[numSalon].nbUsers);
@@ -601,6 +600,19 @@ void * connexionClients() {
             perror("L'utilisateur n'a pas été accepté");
         }
         else {
+
+            int connexionPossible = nbUsers+1 > NB_CLIENT_MAX ? 0 : 1;
+
+            res = send(dSC, &connexionPossible, sizeof(int), 0);
+
+            if (res == -1) {
+                perror("Erreur lors de l'envoi de connexionPossible");
+            }
+
+            if (connexionPossible == 0) {
+                continue;
+            }
+
             position = indiceCaseLibre(users.dSMessage, nbUsers);
 
             // Réception du pseudo du client

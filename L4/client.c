@@ -16,6 +16,7 @@
 
 #define TAILLE_MAX 1001 // Taille maximum d'un message
 #define NB_CLIENT_MAX 100 //nb max de clients
+#define NB_SALON_MAX 10 // Nombre maximum de salons
 
 // Informations sur le client
 struct {
@@ -66,6 +67,7 @@ int connexionSocket(int port, char* ip) {
         exit(1);
     }
     else {
+
         //printf("Connexion réussie à la socket %d\n", idSocket);
 
         return idSocket;
@@ -459,13 +461,32 @@ void choixAction(int expediteur) {
     char* listeSalons = recvTCP(expediteur, 1000);
 
     printf("Que voulez-vous faire ?\n");
-    printf("\tCréer un salon (tapez 1)\n");
-    printf("\tRejoindre un salon (tapez 2)\n");
 
-    do {
-        printf("Choix : ");
-        choix = saisieInt();
-    } while (choix != 1 && choix != 2);
+    if (nbSalons == 0) {
+        printf("\tCréer un salon (tapez 1)\n");
+
+        do {
+            printf("Choix : ");
+            choix = saisieInt();
+        } while (choix != 1);
+    }
+    else if (nbSalons >= NB_SALON_MAX) {
+        printf("\tRejoindre un salon (tapez 2)\n");
+
+        do {
+            printf("Choix : ");
+            choix = saisieInt();
+        } while (choix != 2);
+    }
+    else {
+        printf("\tCréer un salon (tapez 1)\n");
+        printf("\tRejoindre un salon (tapez 2)\n");
+
+        do {
+            printf("Choix : ");
+            choix = saisieInt();
+        } while (choix != 1 && choix != 2);
+    }
 
     char* nomSalon;
 
@@ -587,6 +608,21 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, fini);
 
     int res;
+
+    int connexionPossible;
+
+    //Réception connexion possible ou non
+    res = recv(infos.dS, &connexionPossible, sizeof(int), 0);
+
+    if (res == -1) {
+        perror("Erreur lors de la réception de l'autorisation de connexion");
+        exit(1);
+    }
+
+    if (connexionPossible == 0) {
+        printf("Plus de places sur le serveur ! Veuillez réessayer plus tard\n");
+        exit(0);
+    }
 
     // Envoi du pseudo au serveur
     res = send(infos.dS, infos.pseudo, strlen(infos.pseudo), 0);
