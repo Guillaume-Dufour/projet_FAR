@@ -672,7 +672,7 @@ int main(int argc, char* argv[]) {
 
         // On attend que tous les clients soient déconnectés avant de relancer le serveur et l'attente de clients
         int numUser = 0;
-
+        sleep(100);
         while (nbUsers >= 0) {
             if (numUser < nbUsers && nbUsers != 0) {
                 if (pthread_join(th[numUser], &ret) != 0){
